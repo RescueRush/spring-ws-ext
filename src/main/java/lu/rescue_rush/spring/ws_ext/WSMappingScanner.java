@@ -60,7 +60,7 @@ public class WSMappingScanner implements ApplicationContextAware {
 
 				final WSMapping mapping = targetMethod.getAnnotation(WSMapping.class);
 				final WSResponseMapping responseMapping = targetMethod.getAnnotation(WSResponseMapping.class);
-				final WSAllowAnonymous allowAnonymous = targetMethod.getAnnotation(WSAllowAnonymous.class);
+				final AllowAnonymous allowAnonymous = targetMethod.getAnnotation(AllowAnonymous.class);
 
 				final String inPath = normalizeURI(mapping.path());
 				final String outPath = normalizeURI(responseMapping == null ? mapping.path() : responseMapping.path());
