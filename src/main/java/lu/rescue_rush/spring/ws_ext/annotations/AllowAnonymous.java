@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext;
+package lu.rescue_rush.spring.ws_ext.annotations;
 
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;

@@ -39,6 +39,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import lu.rescue_rush.spring.ws_ext.WSMappingRegistry.WSHandlerMethod;
+import lu.rescue_rush.spring.ws_ext.config.WSMappingScanner;
 
 @Component
 @Scope("prototype")

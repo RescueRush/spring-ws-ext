@@ -4,25 +4,9 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
-import org.springframework.stereotype.Component;
-
-@Component
 public class WSMappingRegistry {
 
-	@Autowired
-	private ApplicationContext context;
-
 	private final Map<String, WSHandlerData> beanMap = new ConcurrentHashMap<>();
-
-	public void register(String path, WSExtHandler bean, boolean timeout, long timeoutDelayMs,
-			Map<String, WSHandlerMethod> methods) {
-		final WebSocketHandlerExt attachedHandler = context.getBean(WebSocketHandlerExt.class, path, bean, methods,
-				timeout, timeoutDelayMs);
-		bean.setWebSocketHandler(attachedHandler);
-		beanMap.put(path, new WSHandlerData(path, bean, methods, attachedHandler));
-	}
 
 	public String[] getAllBeans() {
 		return beanMap.keySet().toArray(new String[0]);
@@ -46,8 +30,7 @@ public class WSMappingRegistry {
 	public record WSHandlerMethod(Method method, String inPath, String outPath, boolean allowAnonymous) {
 	}
 
-	public record WSHandlerData(String path, WSExtHandler bean, Map<String, WSHandlerMethod> methods,
-			WebSocketHandlerExt handler) {
+	public record WSHandlerData(String path, WSExtHandler bean, Map<String, WSHandlerMethod> methods, WebSocketHandlerExt handler) {
 
 		public WSHandlerMethod getDestination(String dest) {
 			return methods.get(dest);
@@ -57,6 +40,13 @@ public class WSMappingRegistry {
 
 	public boolean hasBean(String path) {
 		return beanMap.containsKey(path);
+	}
+
+	public void register(String path, WSHandlerData wsHandlerData) {
+		if (beanMap.containsKey(path)) {
+			throw new IllegalArgumentException("WebSocket handler already registered for path: " + path);
+		}
+		beanMap.put(path, wsHandlerData);
 	}
 
 }

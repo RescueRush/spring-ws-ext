@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext;
+package lu.rescue_rush.spring.ws_ext.config;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -8,21 +8,31 @@ import java.util.logging.Logger;
 import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
-import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
+import lu.rescue_rush.spring.ws_ext.WSExtHandler;
+import lu.rescue_rush.spring.ws_ext.WSMappingRegistry;
+import lu.rescue_rush.spring.ws_ext.WSMappingRegistry.WSHandlerData;
 import lu.rescue_rush.spring.ws_ext.WSMappingRegistry.WSHandlerMethod;
+import lu.rescue_rush.spring.ws_ext.WebSocketHandlerExt;
+import lu.rescue_rush.spring.ws_ext.annotations.AllowAnonymous;
+import lu.rescue_rush.spring.ws_ext.annotations.WSMapping;
+import lu.rescue_rush.spring.ws_ext.annotations.WSResponseMapping;
+import lu.rescue_rush.spring.ws_ext.annotations.WSTimeout;
 
-@Component
-public class WSMappingScanner implements ApplicationContextAware {
+@Configuration
+public class WSMappingScanner {
 
 	private final Logger LOGGER = Logger.getLogger(WSMappingScanner.class.getName());
 
 	@Autowired
-	private WSMappingRegistry registry;
+	private ApplicationContext applicationContext;
 
-	@Override
-	public void setApplicationContext(ApplicationContext applicationContext) {
+	@Bean
+	public WSMappingRegistry wsMappingRegistry() {
+		final WSMappingRegistry registry = new WSMappingRegistry();
+
 		for (Object bean : applicationContext.getBeansWithAnnotation(WSMapping.class).values()) {
 
 			if (!(bean instanceof WSExtHandler)) {
@@ -69,13 +79,28 @@ public class WSMappingScanner implements ApplicationContextAware {
 				methods.put(mapping.path(), new WSHandlerMethod(proxyMethod, inPath, outPath, allowAnonymousFlag));
 			}
 
-			registry
-					.register(beanMapping.path(),
-							(WSExtHandler) bean,
-							timeout != null ? timeout.value() : true,
-							timeout != null ? timeout.timeout() : WebSocketHandlerExt.TIMEOUT,
-							methods);
+			register(registry,
+					beanMapping.path(),
+					(WSExtHandler) bean,
+					timeout != null ? timeout.value() : true,
+					timeout != null ? timeout.timeout() : WebSocketHandlerExt.TIMEOUT,
+					methods);
 		}
+
+		return registry;
+	}
+
+	public void register(
+			WSMappingRegistry registry,
+			String path,
+			WSExtHandler bean,
+			boolean timeout,
+			long timeoutDelayMs,
+			Map<String, WSHandlerMethod> methods) {
+		final WebSocketHandlerExt attachedHandler = applicationContext
+				.getBean(WebSocketHandlerExt.class, path, bean, methods, timeout, timeoutDelayMs);
+		bean.setWebSocketHandler(attachedHandler);
+		registry.register(path, new WSHandlerData(path, bean, methods, attachedHandler));
 	}
 
 	public static String normalizeURI(String path) {

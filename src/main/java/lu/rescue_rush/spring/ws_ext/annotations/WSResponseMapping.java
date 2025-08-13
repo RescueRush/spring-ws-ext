@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext;
+package lu.rescue_rush.spring.ws_ext.annotations;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -12,10 +12,8 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(
 { ElementType.TYPE, ElementType.METHOD })
-public @interface WSTimeout {
+public @interface WSResponseMapping {
 
-	boolean value();
-
-	long timeout() default WebSocketHandlerExt.TIMEOUT;
+	String path() default "";
 
 }
