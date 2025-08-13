@@ -137,7 +137,7 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 
 			wsSessionDatas.put(session.getId(), sessionData);
 		} else { // logged in user
-			final UserID user = (UserID) session.getAttributes().get("user");
+			final UserID user = (UserID) auth.getPrincipal();
 			sessionData = new WebSocketSessionData(session.getId(), auth, user, this.beanPath);
 
 			wsSessionDatas.put(session.getId(), sessionData);
@@ -158,11 +158,11 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 			LOGGER.info("[" + session.getId() + "] Received message: " + message.toString());
 		}
 
-		final JsonNode json = new ObjectMapper().readTree(message.getPayload());
-		badRequest(!json.has("destination"), session, "Invalid packet format: missing 'destination' field.", message.getPayload());
-		String requestPath = json.get("destination").asText();
-		final String packetId = json.has("packetId") ? json.get("packetId").asText() : null;
-		final JsonNode payload = json.get("payload");
+		final JsonNode incomingJson = new ObjectMapper().readTree(message.getPayload());
+		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.", message.getPayload());
+		String requestPath = incomingJson.get("destination").asText();
+		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
+		final JsonNode payload = incomingJson.get("payload");
 
 		final Authentication auth = (Authentication) session.getAttributes().get("auth");
 		SecurityContextHolder.getContext().setAuthentication(auth);
@@ -219,6 +219,17 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 			session.sendMessage(new TextMessage(jsonResponse));
 		} catch (Exception e) {
 			err = e;
+
+			final ObjectNode root = new ObjectMapper().createObjectNode();
+			root.put("status", 500);
+			root.set("packet", incomingJson);
+			
+			if (e instanceof ResponseStatusException rse) {
+				root.put("status", rse.getStatusCode().value());
+				root.put("message", rse.getReason());
+			}
+			
+			session.sendMessage(new TextMessage(root.toString()));
 		} finally {
 			SecurityContextHolder.clearContext();
 			LocaleContextHolder.setLocale(null);

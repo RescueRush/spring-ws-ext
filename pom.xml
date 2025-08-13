@@ -14,8 +14,24 @@
 	<artifactId>spring-ws-ext</artifactId>
 	<version>0.1</version>
 
+	<contributors>
+		<contributor>
+			<name>UnKabaraQuiDev</name>
+			<url>https://github.com/UnKabaraQuiDev/</url>
+		</contributor>
+	</contributors>
+
+	<licenses>
+		<license>
+			<name>GNU General Public License, Version 3</name>
+			<url>https://www.gnu.org/licenses/gpl-3.0.html</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
 	<name>Spring WebSocket Extended</name>
 	<description>An extension to Spring's WebSocket system</description>
+	<url>https://github.com/RescueRush/spring-ws-ext</url>
 
 	<properties>
 		<java.version>17</java.version>
