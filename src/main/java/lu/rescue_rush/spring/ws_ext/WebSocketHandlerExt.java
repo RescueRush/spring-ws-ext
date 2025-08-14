@@ -20,6 +20,7 @@ import java.util.function.Predicate;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -68,6 +70,9 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 
 	private final boolean timeout;
 	private final long timeoutDelay;
+	
+	@Autowired
+	private ObjectMapper objectMapper;
 
 	public WebSocketHandlerExt(String path, WSExtHandler bean, Map<String, WSHandlerMethod> methods, boolean timeout, long timeoutDelayMs) {
 		this.beanPath = path;
@@ -158,7 +163,7 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 			LOGGER.info("[" + session.getId() + "] Received message: " + message.toString());
 		}
 
-		final JsonNode incomingJson = new ObjectMapper().readTree(message.getPayload());
+		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
 		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.", message.getPayload());
 		String requestPath = incomingJson.get("destination").asText();
 		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
@@ -197,7 +202,7 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 			if (method.getParameterCount() == 2) {
 				final Class<?> parameterType = method.getParameterTypes()[1];
 				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
-				final Object param = new ObjectMapper().readValue(payload.toString(), parameterType);
+				final Object param = objectMapper.readValue(payload.toString(), parameterType);
 
 				returnValue = method.invoke(bean, userSession, param);
 			} else if (method.getParameterCount() == 1) {
@@ -207,7 +212,6 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 				return;
 			}
 
-			final ObjectMapper objectMapper = new ObjectMapper();
 			final ObjectNode root = objectMapper.createObjectNode();
 			root.set("payload", objectMapper.valueToTree(returnValue));
 			root.put("destination", responsePath);
@@ -220,15 +224,15 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 		} catch (Exception e) {
 			err = e;
 
-			final ObjectNode root = new ObjectMapper().createObjectNode();
+			final ObjectNode root = objectMapper.createObjectNode();
 			root.put("status", 500);
 			root.set("packet", incomingJson);
-			
+
 			if (e instanceof ResponseStatusException rse) {
 				root.put("status", rse.getStatusCode().value());
 				root.put("message", rse.getReason());
 			}
-			
+
 			session.sendMessage(new TextMessage(root.toString()));
 		} finally {
 			SecurityContextHolder.clearContext();
@@ -343,14 +347,7 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 
 		if (session.isOpen()) {
 			try {
-				final ObjectMapper objectMapper = new ObjectMapper();
-				final ObjectNode root = objectMapper.createObjectNode();
-				root.set("payload", objectMapper.valueToTree(payload));
-				root.put("destination", destination);
-				if (packetId != null) {
-					root.put("packetId", packetId);
-				}
-				final String json = objectMapper.writeValueAsString(root);
+				final String json = buildPacket(destination, packetId, payload);
 
 				session.sendMessage(new TextMessage(json));
 
@@ -375,6 +372,49 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 
 	public void send(WebSocketSession session, String destination, Object payload) {
 		send(session, destination, null, payload);
+	}
+
+	public int broadcast(Predicate<WebSocketSessionData> predicate, String destination, Object payload) {
+		int count = 0;
+
+		final String json = buildPacket(destination, null, payload);
+
+		for (WebSocketSessionData wsSessionData : wsSessionDatas.values()) {
+			if (!predicate.test(wsSessionData)) {
+				continue;
+			}
+
+			final WebSocketSession wsSession = wsSessionData.getSession();
+			if (wsSession.isOpen()) {
+				try {
+					wsSession.sendMessage(new TextMessage(json));
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				count++;
+			} else {
+				LOGGER.warning("Session is closed: " + wsSession);
+			}
+		}
+		return count;
+	}
+
+	public int broadcast(String destination, Object payload) {
+		return broadcast((s) -> true, destination, payload);
+	}
+
+	private String buildPacket(String destination, String packetId, Object payload) {
+		try {
+			final ObjectNode root = objectMapper.createObjectNode();
+			root.set("payload", objectMapper.valueToTree(payload));
+			root.put("destination", destination);
+			if (packetId != null) {
+				root.put("packetId", packetId);
+			}
+			return objectMapper.writeValueAsString(root);
+		} catch (JsonProcessingException e) {
+			throw new RuntimeException("Error while building packet.", e);
+		}
 	}
 
 	public WSHandlerMethod resolveMethod(String requestPath) {
@@ -406,6 +446,18 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 
 	public WebSocketSessionData getUserSession(Long ud) {
 		return userSessionDatas.get(ud);
+	}
+
+	public Collection<WebSocketSession> getConnectedSessions() {
+		return wsSessions.values();
+	}
+
+	public Collection<WebSocketSessionData> getConnectedSessionDatas() {
+		return wsSessionDatas.values();
+	}
+
+	public Collection<WebSocketSessionData> getConnectedUserSessionDatas() {
+		return userSessionDatas.values();
 	}
 
 	public record ScheduledTaskData<T>(String id, ScheduledFuture<T> future) {

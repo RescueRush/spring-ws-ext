@@ -44,7 +44,8 @@ public class WSMappingRegistry {
 
 	public void register(String path, WSHandlerData wsHandlerData) {
 		if (beanMap.containsKey(path)) {
-			throw new IllegalArgumentException("WebSocket handler already registered for path: " + path);
+			throw new IllegalArgumentException("WebSocket handler already registered for path: " + path + ", conflicts between: "
+					+ wsHandlerData.getClass().getName() + " and " + beanMap.get(path).getClass().getName());
 		}
 		beanMap.put(path, wsHandlerData);
 	}

@@ -97,8 +97,11 @@ public class WSMappingScanner {
 			boolean timeout,
 			long timeoutDelayMs,
 			Map<String, WSHandlerMethod> methods) {
+		
 		final WebSocketHandlerExt attachedHandler = applicationContext
 				.getBean(WebSocketHandlerExt.class, path, bean, methods, timeout, timeoutDelayMs);
+		applicationContext.getAutowireCapableBeanFactory().autowireBean(attachedHandler);
+		
 		bean.setWebSocketHandler(attachedHandler);
 		registry.register(path, new WSHandlerData(path, bean, methods, attachedHandler));
 	}
