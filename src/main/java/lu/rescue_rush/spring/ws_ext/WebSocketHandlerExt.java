@@ -70,7 +70,7 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 
 	private final boolean timeout;
 	private final long timeoutDelay;
-	
+
 	@Autowired
 	private ObjectMapper objectMapper;
 
@@ -176,6 +176,7 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
 		final Method method = handlerMethod.method();
 		badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
+		final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
 		requestPath = handlerMethod.inPath();
 		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath, message.getPayload());
 		final String responsePath = handlerMethod.outPath();
@@ -212,15 +213,17 @@ public class WebSocketHandlerExt extends TextWebSocketHandler {
 				return;
 			}
 
-			final ObjectNode root = objectMapper.createObjectNode();
-			root.set("payload", objectMapper.valueToTree(returnValue));
-			root.put("destination", responsePath);
-			if (packetId != null) {
-				root.put("packetId", packetId);
-			}
-			final String jsonResponse = objectMapper.writeValueAsString(root);
+			if (!returnsVoid) {
+				final ObjectNode root = objectMapper.createObjectNode();
+				root.set("payload", objectMapper.valueToTree(returnValue));
+				root.put("destination", responsePath);
+				if (packetId != null) {
+					root.put("packetId", packetId);
+				}
+				final String jsonResponse = objectMapper.writeValueAsString(root);
 
-			session.sendMessage(new TextMessage(jsonResponse));
+				session.sendMessage(new TextMessage(jsonResponse));
+			}
 		} catch (Exception e) {
 			err = e;
 
