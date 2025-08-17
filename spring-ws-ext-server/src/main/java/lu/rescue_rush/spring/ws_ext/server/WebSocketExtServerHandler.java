@@ -38,9 +38,11 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerMappingRegistry.WSHandlerMethod;
 
@@ -199,9 +201,9 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			Object returnValue = null;
 
 			if (method.getParameterCount() == 2) {
-				final Class<?> parameterType = method.getParameterTypes()[1];
 				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
-				final Object param = objectMapper.readValue(payload.toString(), parameterType);
+				JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				final Object param = objectMapper.readValue(payload.toString(), javaType);
 
 				returnValue = method.invoke(bean, userSession, param);
 			} else if (method.getParameterCount() == 1) {

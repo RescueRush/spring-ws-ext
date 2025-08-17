@@ -29,9 +29,11 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 
 import lu.rescue_rush.spring.ws_ext.client.WSExtClientMappingRegistry.WSHandlerMethod;
 
@@ -105,7 +107,7 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 
 	private void scheduleReconnect() {
 		if (persistentConnection) {
-			if(DEBUG) {
+			if (DEBUG) {
 				LOGGER.info("Reconnecting in 5 sec...");
 			}
 			reconnectScheduler.schedule(this::connect, 5, TimeUnit.SECONDS);
@@ -164,9 +166,9 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 			Object returnValue = null;
 
 			if (method.getParameterCount() == 2) {
-				final Class<?> parameterType = method.getParameterTypes()[1];
 				badRequest(payload == null, "Payload expected for destination: " + requestPath, message.getPayload());
-				final Object param = objectMapper.readValue(payload.toString(), parameterType);
+				JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				final Object param = objectMapper.readValue(payload.toString(), javaType);
 
 				returnValue = method.invoke(bean, sessionData, param);
 			} else if (method.getParameterCount() == 1) {
@@ -259,11 +261,11 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 				matchingPatterns.add(pattern);
 			}
 		}
-		
-		if(matchingPatterns.isEmpty()) {
+
+		if (matchingPatterns.isEmpty()) {
 			return null;
 		}
-		
+
 		matchingPatterns.sort(pathMatcher.getPatternComparator(requestPath));
 		String bestPattern = matchingPatterns.get(0);
 		WSHandlerMethod bestMatch = methods.get(bestPattern);
