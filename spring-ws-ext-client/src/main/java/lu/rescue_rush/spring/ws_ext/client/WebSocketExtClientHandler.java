@@ -79,12 +79,10 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 	}
 
 	public void scheduleStart() {
-		System.out.println("schedule started connect");
 		reconnectScheduler.submit(this::connect);
 	}
 
 	private void connect() {
-		System.out.println("connect started");
 		if (session != null) {
 			synchronized (session) {
 				if (session != null || session.isOpen()) {
@@ -95,22 +93,21 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 		}
 
 		try {
-			System.out.println("connect started 2");
 			client = new StandardWebSocketClient();
 			session = client
 					.execute(this, bean.buildHttpHeaders(), wsPath == null ? bean.buildRemoteURI() : bean.buildRemoteURI().resolve(wsPath))
 					.get();
-			System.out.println("connected");
 		} catch (Exception e) {
 			LOGGER.log(Level.WARNING, "Connection failed: ", e);
 			scheduleReconnect();
 		}
-		bean.onConnect(sessionData);
 	}
 
 	private void scheduleReconnect() {
 		if (persistentConnection) {
-			System.out.println("Scheduling reconnect in 5 seconds...");
+			if(DEBUG) {
+				LOGGER.info("Reconnecting in 5 sec...");
+			}
 			reconnectScheduler.schedule(this::connect, 5, TimeUnit.SECONDS);
 		}
 	}
