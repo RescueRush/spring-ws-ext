@@ -4,6 +4,7 @@ import static lu.rescue_rush.spring.ws_ext.common.WSPathUtils.normalizeURI;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -94,13 +95,13 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 			}
 		}
 
+		final URI path = wsPath == null ? bean.buildRemoteURI() : bean.buildRemoteURI().resolve(wsPath);
+
 		try {
 			client = new StandardWebSocketClient();
-			session = client
-					.execute(this, bean.buildHttpHeaders(), wsPath == null ? bean.buildRemoteURI() : bean.buildRemoteURI().resolve(wsPath))
-					.get();
+			session = client.execute(this, bean.buildHttpHeaders(), path).get();
 		} catch (Exception e) {
-			LOGGER.log(Level.WARNING, "Connection failed: ", e);
+			LOGGER.log(Level.WARNING, "Connection failed to '" + path + "': ", e);
 			scheduleReconnect();
 		}
 	}

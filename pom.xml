@@ -8,6 +8,11 @@
 	<version>0.1</version>
 	<packaging>pom</packaging>
 
+
+	<name>Spring WebSocket Extended</name>
+	<description>An extension to Spring's WebSocket system</description>
+	<url>https://github.com/RescueRush/spring-ws-ext</url>
+
 	<modules>
 		<module>spring-ws-ext-common</module>
 		<module>spring-ws-ext-client</module>
@@ -29,9 +34,6 @@
 		</license>
 	</licenses>
 
-	<name>Spring WebSocket Extended</name>
-	<description>An extension to Spring's WebSocket system</description>
-	<url>https://github.com/RescueRush/spring-ws-ext</url>
 
 	<properties>
 		<java.version>17</java.version>

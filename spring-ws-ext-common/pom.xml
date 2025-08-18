@@ -11,6 +11,7 @@
 	</parent>
 
 	<artifactId>spring-ws-ext-common</artifactId>
+	<name>Spring WebSocket Extended (Client)</name>
 
 	<dependencies>
 		<dependency>
