@@ -100,10 +100,6 @@ public class WSExtClientMappingScanner {
 		applicationContext.getAutowireCapableBeanFactory().autowireBean(attachedHandler);
 		applicationContext.getAutowireCapableBeanFactory().initializeBean(bean, StringUtils.uncapitalize(name));
 
-		// init bean
-		bean.setWebSocketHandler(attachedHandler);
-		bean.init();
-
 		registry.register(name, new WSHandlerData(path, bean, methods, attachedHandler, persistentConnectionFlag));
 	}
 

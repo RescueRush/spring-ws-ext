@@ -44,6 +44,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 
+import jakarta.annotation.PostConstruct;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerMappingRegistry.WSHandlerMethod;
 
 @Component("server_webSocketHandlerExt")
@@ -77,7 +78,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 	@Autowired
 	private ObjectMapper objectMapper;
 
-	public WebSocketExtServerHandler(String path, WSExtServerHandler bean, Map<String, WSHandlerMethod> methods, boolean timeout, long timeoutDelayMs) {
+	public WebSocketExtServerHandler(String path, WSExtServerHandler bean, Map<String, WSHandlerMethod> methods, boolean timeout,
+			long timeoutDelayMs) {
 		this.beanPath = path;
 		this.bean = bean;
 		this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
@@ -127,6 +129,12 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			scheduledTasks.entrySet().removeIf(e -> e.getValue().isEmpty());
 		}, PERIODIC_CHECK_DELAY, PERIODIC_CHECK_DELAY, TimeUnit.MILLISECONDS);
 	}
+	
+	@PostConstruct
+	private void init() {
+		bean.setWebSocketHandler(this);
+		bean.init();
+	}
 
 	@Override
 	public void afterConnectionEstablished(WebSocketSession session) {
@@ -160,7 +168,7 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 	@Override
 	protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
 		if (DEBUG) {
-			LOGGER.info("[" + session.getId() + "] Received message: " + message.toString());
+			LOGGER.info("[" + session.getId() + "] Received message: " + message.getPayload());
 		}
 
 		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
@@ -202,8 +210,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 
 			if (method.getParameterCount() == 2) {
 				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
-				JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
-				final Object param = objectMapper.readValue(payload.toString(), javaType);
+				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				final Object param = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
 
 				returnValue = method.invoke(bean, userSession, param);
 			} else if (method.getParameterCount() == 1) {
@@ -211,6 +219,10 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			} else {
 				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
 				return;
+			}
+
+			if (DEBUG) {
+				LOGGER.info("Returns void: " + returnsVoid + ", return value: " + returnValue);
 			}
 
 			if (!returnsVoid) {
@@ -221,6 +233,12 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 					root.put("packetId", packetId);
 				}
 				final String jsonResponse = objectMapper.writeValueAsString(root);
+
+				if (DEBUG) {
+					LOGGER
+							.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath + "): "
+									+ jsonResponse);
+				}
 
 				session.sendMessage(new TextMessage(jsonResponse));
 			}
@@ -234,6 +252,12 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			if (e instanceof ResponseStatusException rse) {
 				root.put("status", rse.getStatusCode().value());
 				root.put("message", rse.getReason());
+			}
+
+			if (DEBUG) {
+				LOGGER
+						.info("[" + session.getId() + "] Error while handling message (" + requestPath + "): " + e.getMessage() + " ("
+								+ e.getClass().getName() + ")");
 			}
 
 			session.sendMessage(new TextMessage(root.toString()));
@@ -352,6 +376,10 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			try {
 				final String json = buildPacket(destination, packetId, payload);
 
+				if (DEBUG) {
+					LOGGER.info("[" + session.getId() + "] Sending message (" + destination + "): " + json);
+				}
+
 				session.sendMessage(new TextMessage(json));
 
 				wsSessionDatas.get(session.getId()).lastPacket = System.currentTimeMillis();
@@ -399,6 +427,11 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 				LOGGER.warning("Session is closed: " + wsSession);
 			}
 		}
+
+		if (DEBUG) {
+			LOGGER.info("Broadcasting message to " + count + " sessions: " + json);
+		}
+
 		return count;
 	}
 

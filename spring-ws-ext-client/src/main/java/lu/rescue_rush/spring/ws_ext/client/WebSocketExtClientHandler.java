@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 
+import jakarta.annotation.PostConstruct;
 import lu.rescue_rush.spring.ws_ext.client.WSExtClientMappingRegistry.WSHandlerMethod;
 
 @Component("client_webSocketHandlerExt")
@@ -77,6 +78,12 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 						+ (wsPath == null ? "" : " (" + wsPath + ")"));
 	}
 
+	@PostConstruct
+	private void init() {
+		bean.setWebSocketHandler(this);
+		bean.init();
+	}
+	
 	public void start() {
 		connect();
 	}
@@ -140,7 +147,7 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 		setSession(session);
 
 		if (DEBUG) {
-			LOGGER.info("[" + session.getId() + "] Received message: " + message.toString());
+			LOGGER.info("Received message: " + message.getPayload());
 		}
 
 		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
@@ -168,9 +175,9 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 
 			if (method.getParameterCount() == 2) {
 				badRequest(payload == null, "Payload expected for destination: " + requestPath, message.getPayload());
-				JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
-				final Object param = objectMapper.readValue(payload.toString(), javaType);
-
+				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				final Object param = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+				
 				returnValue = method.invoke(bean, sessionData, param);
 			} else if (method.getParameterCount() == 1) {
 				returnValue = method.invoke(bean, sessionData);
@@ -187,6 +194,10 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 					root.put("packetId", packetId);
 				}
 				final String jsonResponse = objectMapper.writeValueAsString(root);
+
+				if (DEBUG) {
+					LOGGER.info("Sending response (" + requestPath + " -> " + responsePath + "): " + jsonResponse);
+				}
 
 				session.sendMessage(new TextMessage(jsonResponse));
 			}
@@ -210,6 +221,25 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 		}
 	}
 
+	@Override
+	public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+		setSession(session);
+
+		if (DEBUG) {
+			LOGGER.warning("Transport error on session: " + exception.getMessage());
+		}
+
+		if (exception instanceof ResponseStatusException rse) {
+			LOGGER.warning("Response status error: " + rse.getReason());
+		} else {
+			LOGGER.log(Level.WARNING, "Unexpected transport error: ", exception);
+		}
+
+		if (persistentConnection) {
+			scheduleReconnect();
+		}
+	}
+
 	private void badRequest(boolean b, String msg, String content) {
 		if (!b)
 			return;
@@ -228,6 +258,10 @@ public class WebSocketExtClientHandler extends TextWebSocketHandler {
 		try {
 			final String json = buildPacket(destination, packetId, payload);
 
+			if (DEBUG) {
+				LOGGER.info("Sending packet (" + destination + "): " + json);
+			}
+			
 			session.sendMessage(new TextMessage(json));
 
 			sessionData.lastPacket = System.currentTimeMillis();

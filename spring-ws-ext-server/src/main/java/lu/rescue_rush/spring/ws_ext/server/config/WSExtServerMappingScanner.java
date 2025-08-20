@@ -104,7 +104,7 @@ public class WSExtServerMappingScanner {
 				.getBean(WebSocketExtServerHandler.class, path, bean, methods, timeout, timeoutDelayMs);
 		applicationContext.getAutowireCapableBeanFactory().autowireBean(attachedHandler);
 		
-		bean.setWebSocketHandler(attachedHandler);
+		// bean.setWebSocketHandler(attachedHandler);
 		registry.register(path, new WSHandlerData(path, bean, methods, attachedHandler));
 	}
 
