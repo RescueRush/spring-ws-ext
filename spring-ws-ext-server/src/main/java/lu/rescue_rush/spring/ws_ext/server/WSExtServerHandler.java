@@ -1,6 +1,8 @@
 package lu.rescue_rush.spring.ws_ext.server;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -97,6 +99,10 @@ public abstract class WSExtServerHandler {
 
 	public WebSocketSessionData getUserSession(long userId) {
 		return webSocketHandler.getUserSession(userId);
+	}
+	
+	public List<WebSocketSessionData> getUserSessions(Set<Long> ids){
+		return webSocketHandler.getUserSessions(ids);
 	}
 
 }
