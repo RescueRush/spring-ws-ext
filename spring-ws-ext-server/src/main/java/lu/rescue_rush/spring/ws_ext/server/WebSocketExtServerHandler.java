@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -482,6 +483,10 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 
 	public WebSocketSessionData getUserSession(Long ud) {
 		return userSessionDatas.get(ud);
+	}
+	
+	public List<WebSocketSessionData> getUserSessions(Set<Long> ids){
+		return ids.stream().map(userSessionDatas::get).filter(Objects::nonNull).toList();
 	}
 
 	public Collection<WebSocketSession> getConnectedSessions() {
