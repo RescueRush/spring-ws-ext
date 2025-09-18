@@ -79,17 +79,19 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 	@Autowired
 	private ObjectMapper objectMapper;
 
-	public WebSocketExtServerHandler(String path, WSExtServerHandler bean, Map<String, WSHandlerMethod> methods, boolean timeout,
-			long timeoutDelayMs) {
+	public WebSocketExtServerHandler(String path, WSExtServerHandler bean, Map<String, WSHandlerMethod> methods,
+			boolean timeout, long timeoutDelayMs) {
 		this.beanPath = path;
 		this.bean = bean;
-		this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
+		this.methods = methods.entrySet().stream()
+				.collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
 		this.timeout = timeout;
 		this.timeoutDelay = timeoutDelayMs;
 
 		this.LOGGER = Logger.getLogger("WebSocketHandler " + path);
 
 		executorService.scheduleAtFixedRate(() -> {
+			// remove closed or timed out sessions
 			wsSessionDatas.entrySet().removeIf(entry -> {
 				final WebSocketSessionData sessionData = entry.getValue();
 				final WebSocketSession session = sessionData.getSession();
@@ -98,39 +100,42 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 					scheduledTasks.remove(session.getId());
 					try {
 						if (DEBUG) {
-							LOGGER
-									.info("Removed invalid session (" + (sessionData.isUser() ? sessionData.getUser() : "ANONYMOUS") + " ["
-											+ sessionData.getSession().getId() + "])");
+							LOGGER.info("Removed invalid session ("
+									+ (sessionData.isUser() ? sessionData.getUser() : "ANONYMOUS") + " ["
+									+ sessionData.getSession().getId() + "])");
 						}
 						sessionData.getSession().close(CloseStatus.NORMAL);
 					} catch (IOException e) {
-						LOGGER.warning("Failed to close session (" + sessionData.getSession().getId() + "): " + e.getMessage());
+						LOGGER.warning("Failed to close session (" + sessionData.getSession().getId() + "): "
+								+ e.getMessage());
 					}
 					return true;
 				}
 
-				if (!sessionData.isAlive() && this.timeout) {
+				if (this.timeout && !sessionData.isAlive()) {
 					scheduledTasks.remove(session.getId());
 					try {
 						if (DEBUG) {
-							LOGGER
-									.info("Removed timed out session (" + (sessionData.isUser() ? sessionData.getUser() : "ANONYMOUS")
-											+ " [" + sessionData.getSession().getId() + "])");
+							LOGGER.info("Removed timed out session ("
+									+ (sessionData.isUser() ? sessionData.getUser() : "ANONYMOUS") + " ["
+									+ sessionData.getSession().getId() + "])");
 						}
 						sessionData.getSession().close(CloseStatus.NORMAL);
 					} catch (IOException e) {
-						LOGGER.warning("Failed to close session (" + sessionData.getSession().getId() + "): " + e.getMessage());
+						LOGGER.warning("Failed to close session (" + sessionData.getSession().getId() + "): "
+								+ e.getMessage());
 					}
 					return true;
 				}
 				return false;
 			});
 
+			// clear executed/cancelled scheduled tasks
 			scheduledTasks.entrySet().forEach(e -> e.getValue().removeIf(t -> t.isCancelled() || t.isDone()));
 			scheduledTasks.entrySet().removeIf(e -> e.getValue().isEmpty());
 		}, PERIODIC_CHECK_DELAY, PERIODIC_CHECK_DELAY, TimeUnit.MILLISECONDS);
 	}
-	
+
 	@PostConstruct
 	private void init() {
 		bean.setWebSocketHandler(this);
@@ -161,7 +166,7 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 		bean.onConnect(sessionData);
 	}
 
-	private boolean isAnonymousContext() {
+	private static boolean isAnonymousContext() {
 		final Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 		return auth == null || !auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken;
 	}
@@ -173,7 +178,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 		}
 
 		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
-		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.", message.getPayload());
+		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.",
+				message.getPayload());
 		String requestPath = incomingJson.get("destination").asText();
 		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
 		final JsonNode payload = incomingJson.get("payload");
@@ -182,12 +188,14 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 		SecurityContextHolder.getContext().setAuthentication(auth);
 
 		final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
-		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
+		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath,
+				message.getPayload());
 		final Method method = handlerMethod.method();
 		badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
 		final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
 		requestPath = handlerMethod.inPath();
-		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath, message.getPayload());
+		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath,
+				message.getPayload());
 		final String responsePath = handlerMethod.outPath();
 
 		final WebSocketSessionData userSession = wsSessionDatas.get(session.getId());
@@ -210,15 +218,18 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			Object returnValue = null;
 
 			if (method.getParameterCount() == 2) {
-				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
-				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				badRequest(payload == null, session, "Payload expected for destination: " + requestPath,
+						message.getPayload());
+				final JavaType javaType = TypeFactory.defaultInstance()
+						.constructType(method.getGenericParameterTypes()[1]);
 				final Object param = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
 
 				returnValue = method.invoke(bean, userSession, param);
 			} else if (method.getParameterCount() == 1) {
 				returnValue = method.invoke(bean, userSession);
 			} else {
-				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
+				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: "
+						+ method.getParameterCount());
 				return;
 			}
 
@@ -236,9 +247,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 				final String jsonResponse = objectMapper.writeValueAsString(root);
 
 				if (DEBUG) {
-					LOGGER
-							.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath + "): "
-									+ jsonResponse);
+					LOGGER.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath
+							+ "): " + jsonResponse);
 				}
 
 				session.sendMessage(new TextMessage(jsonResponse));
@@ -256,9 +266,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 			}
 
 			if (DEBUG) {
-				LOGGER
-						.info("[" + session.getId() + "] Error while handling message (" + requestPath + "): " + e.getMessage() + " ("
-								+ e.getClass().getName() + ")");
+				LOGGER.info("[" + session.getId() + "] Error while handling message (" + requestPath + "): "
+						+ e.getMessage() + " (" + e.getClass().getName() + ")");
 			}
 
 			session.sendMessage(new TextMessage(root.toString()));
@@ -355,7 +364,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 		}, id, delay, unit);
 	}
 
-	public <T> void scheduleTask(WebSocketSessionData sessionData, Callable<T> run, String id, long delay, TimeUnit unit) {
+	public <T> void scheduleTask(WebSocketSessionData sessionData, Callable<T> run, String id, long delay,
+			TimeUnit unit) {
 		Objects.requireNonNull(sessionData);
 		scheduleTask(sessionData.getSession(), run, id, delay, unit);
 	}
@@ -365,11 +375,11 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 
 		final ScheduledFuture<T> newTask = executorService.schedule(run, delay, unit);
 
-		scheduledTasks.computeIfAbsent(session.getId(), (k) -> Collections.synchronizedList(new ArrayList<ScheduledTaskData<?>>()));
+		scheduledTasks.computeIfAbsent(session.getId(), (k) -> Collections.synchronizedList(new ArrayList<>()));
 		scheduledTasks.get(session.getId()).add(new ScheduledTaskData<T>(id, newTask));
 	}
 
-	public void send(WebSocketSession session, String destination, String packetId, Object payload) {
+	protected void send(WebSocketSession session, String destination, String packetId, Object payload) {
 		Objects.requireNonNull(session);
 		Objects.requireNonNull(destination);
 
@@ -392,17 +402,17 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 		}
 	}
 
-	public void send(WebSocketSessionData sessionData, String destination, String packetId, Object payload) {
+	protected void send(WebSocketSessionData sessionData, String destination, String packetId, Object payload) {
 		Objects.requireNonNull(sessionData);
 		send(sessionData.getSession(), destination, packetId, payload);
 	}
 
-	public void send(WebSocketSessionData sessionData, String destination, Object payload) {
+	protected void send(WebSocketSessionData sessionData, String destination, Object payload) {
 		Objects.requireNonNull(sessionData);
 		send(sessionData.getSession(), destination, null, payload);
 	}
 
-	public void send(WebSocketSession session, String destination, Object payload) {
+	protected void send(WebSocketSession session, String destination, Object payload) {
 		send(session, destination, null, payload);
 	}
 
@@ -484,8 +494,8 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 	public WebSocketSessionData getUserSession(Long ud) {
 		return userSessionDatas.get(ud);
 	}
-	
-	public List<WebSocketSessionData> getUserSessions(Set<Long> ids){
+
+	public List<WebSocketSessionData> getUserSessions(Set<Long> ids) {
 		return ids.stream().map(userSessionDatas::get).filter(Objects::nonNull).toList();
 	}
 
@@ -533,15 +543,35 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 
 		private String id;
 		private Authentication auth;
-		private UserID user;
+		private final UserID user;
 		private long lastPacket = System.currentTimeMillis();
-		private String wsPath, requestPath, packetId;
+		/** the websocket endpoint path (bean path/http) */
+		private final String wsPath;
+		/** the current request path (method inPath/destination) */
+		private String requestPath;
+		private String packetId;
 
 		public WebSocketSessionData(String id, Authentication auth, UserID user, String wsPath) {
 			this.id = id;
 			this.auth = auth;
 			this.user = user;
 			this.wsPath = wsPath;
+		}
+
+		public void send(String destination, String packetId, Object payload) {
+			WebSocketExtServerHandler.this.send(getSession(), destination, packetId, payload);
+		}
+
+		public void send(String destination, Object payload) {
+			WebSocketExtServerHandler.this.send(getSession(), destination, null, payload);
+		}
+
+		public void sendThread(String destination, Object payload) {
+			WebSocketExtServerHandler.this.send(getSession(), destination, packetId, payload);
+		}
+
+		public void sendThread(Object payload) {
+			WebSocketExtServerHandler.this.send(getSession(), requestPath, packetId, payload);
 		}
 
 		public void invalidate() {
@@ -572,7 +602,7 @@ public class WebSocketExtServerHandler extends TextWebSocketHandler {
 		}
 
 		public boolean isAlive() {
-			return System.currentTimeMillis() - lastPacket < timeoutDelay;
+			return System.currentTimeMillis() - lastPacket < timeoutDelay || !timeout;
 		}
 
 		public String getWsPath() {

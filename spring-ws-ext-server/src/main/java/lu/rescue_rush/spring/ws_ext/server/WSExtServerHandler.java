@@ -25,21 +25,33 @@ public abstract class WSExtServerHandler {
 	public void onDisconnect(WebSocketSessionData sessionData) {
 	}
 
+	/* vvvvvvvvvvvv */
+
+	/**
+	 * @deprecated use WebSocketSessionData#send(Thread) instead
+	 * @apiNote to be removed
+	 */
+	@Deprecated
 	public void send(WebSocketSessionData sessionData, String destination, String packetId, Object payload) {
 		webSocketHandler.send(sessionData, destination, packetId, payload);
 	}
 
+	@Deprecated
 	public void send(WebSocketSessionData sessionData, String destination, Object payload) {
 		webSocketHandler.send(sessionData, destination, payload);
 	}
 
+	@Deprecated
 	public void send(WebSocketSession session, String destination, String packetId, Object payload) {
 		webSocketHandler.send(session, destination, packetId, payload);
 	}
 
+	@Deprecated
 	public void send(WebSocketSession session, String destination, Object payload) {
 		webSocketHandler.send(session, destination, payload);
 	}
+
+	/* ^^^^^^^^^^^^ */
 
 	public void cancelScheduledTasks(WebSocketSession session) {
 		webSocketHandler.cancelScheduledTasks(session);
@@ -49,14 +61,26 @@ public abstract class WSExtServerHandler {
 		webSocketHandler.cancelScheduledTasks(sessionData);
 	}
 
-	public void clearScheduledTasks(WebSocketSession session, String matchingId) {
-		webSocketHandler.clearScheduledTasks(session, matchingId);
+	public void clearScheduledTasks(WebSocketSession session, String taskId) {
+		webSocketHandler.clearScheduledTasks(session, taskId);
 	}
 
-	public void clearScheduledTasks(WebSocketSessionData sessionData, String matchingId) {
-		webSocketHandler.clearScheduledTasks(sessionData, matchingId);
+	/* vvvvvvvvvvvv */
+
+	/**
+	 * only for optimization as this is executed by WebSocketExtServerHandler's
+	 * executor service
+	 */
+	public void clearScheduledTasks(WebSocketSessionData sessionData, String taskId) {
+		webSocketHandler.clearScheduledTasks(sessionData, taskId);
 	}
 
+	/**
+	 * @deprecated use #clearScheduledTasks(WebSocketSessionData sessionData,
+	 *             Predicate<ScheduledTaskData<?>> pred) instead
+	 * @apiNote to be removed
+	 */
+	@Deprecated
 	public void clearScheduledTasks(WebSocketSession session, Predicate<ScheduledTaskData<?>> pred) {
 		webSocketHandler.clearScheduledTasks(session, pred);
 	}
@@ -65,6 +89,13 @@ public abstract class WSExtServerHandler {
 		webSocketHandler.clearScheduledTasks(sessionData, pred);
 	}
 
+	/* ^^^^^^^^^^^^ */
+
+	/**
+	 * @deprecated use #getScheduledTasks(WebSocketSessionData sessionData) instead
+	 * @apiNote to be removed
+	 */
+	@Deprecated
 	public Collection<ScheduledTaskData<?>> getScheduledTasks(WebSocketSession session) {
 		return webSocketHandler.getScheduledTasks(session);
 	}
@@ -77,14 +108,27 @@ public abstract class WSExtServerHandler {
 		webSocketHandler.scheduleTask(sessionData, run, id, delay, unit);
 	}
 
-	public <T> void scheduleTask(WebSocketSessionData sessionData, Callable<T> run, String id, long delay, TimeUnit unit) {
+	public <T> void scheduleTask(WebSocketSessionData sessionData, Callable<T> run, String id, long delay,
+			TimeUnit unit) {
 		webSocketHandler.scheduleTask(sessionData, run, id, delay, unit);
 	}
 
+	/**
+	 * @deprecated use #scheduleTask(WebSocketSessionData sessionData, Runnable run,
+	 *             String id, long delay, TimeUnit unit) instead
+	 * @apiNote to be removed
+	 */
+	@Deprecated
 	public <T> void scheduleTask(WebSocketSession session, Runnable run, String id, long delay, TimeUnit unit) {
 		webSocketHandler.scheduleTask(session, run, id, delay, unit);
 	}
 
+	/**
+	 * @deprecated use #scheduleTask(WebSocketSessionData sessionData, Callable<T>
+	 *             run, String id, long delay, TimeUnit unit) instead
+	 * @apiNote to be removed
+	 */
+	@Deprecated
 	public <T> void scheduleTask(WebSocketSession session, Callable<T> run, String id, long delay, TimeUnit unit) {
 		webSocketHandler.scheduleTask(session, run, id, delay, unit);
 	}
@@ -100,8 +144,8 @@ public abstract class WSExtServerHandler {
 	public WebSocketSessionData getUserSession(long userId) {
 		return webSocketHandler.getUserSession(userId);
 	}
-	
-	public List<WebSocketSessionData> getUserSessions(Set<Long> ids){
+
+	public List<WebSocketSessionData> getUserSessions(Set<Long> ids) {
 		return webSocketHandler.getUserSessions(ids);
 	}
 
