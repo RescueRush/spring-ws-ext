@@ -10,7 +10,6 @@ import org.springframework.context.annotation.ComponentScan;
 import jakarta.annotation.PostConstruct;
 import lu.rescue_rush.spring.ws_ext.client.WSExtClientHandler;
 import lu.rescue_rush.spring.ws_ext.client.WSExtClientMappingRegistry;
-import lu.rescue_rush.spring.ws_ext.client.WSExtClientMappingRegistry.WSHandlerData;
 
 @AutoConfiguration
 @ComponentScan(basePackageClasses = WSExtClientHandler.class)
@@ -23,15 +22,15 @@ public class WSExtClientConfiguration {
 
 	@PostConstruct
 	public void init() {
-		for (WSHandlerData wsHandlerData : registry.getBeans().values()) {
-			if (wsHandlerData.persistentConnection()) {
-				wsHandlerData.handler().scheduleStart();
+		for (WSExtClientHandler wsHandlerData : registry.getBeans().values()) {
+			if (wsHandlerData.isPersistentConnection()) {
+				wsHandlerData.scheduleStart();
 			}
 		}
 
-		LOGGER
-				.info("Registered " + registry.getAllBeans().length + " Client WebSocket handlers. ["
-						+ registry.getBeans().values().stream().map(WSHandlerData::path).collect(Collectors.joining(", ")) + "]");
+		LOGGER.info(
+				"Registered " + registry.getAllBeans().length + " Client WebSocket handlers. [" + registry.getBeans()
+						.values().stream().map(WSExtClientHandler::getWsPath).collect(Collectors.joining(", ")) + "]");
 	}
 
 }

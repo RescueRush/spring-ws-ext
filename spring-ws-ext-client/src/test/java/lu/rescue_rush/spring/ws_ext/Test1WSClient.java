@@ -4,14 +4,16 @@ import java.net.URI;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 
 import lu.rescue_rush.spring.ws_ext.client.WSExtClientHandler;
-import lu.rescue_rush.spring.ws_ext.client.WebSocketExtClientHandler.WebSocketSessionData;
 import lu.rescue_rush.spring.ws_ext.client.annotations.WSPersistentConnection;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.server.Test1WSServer;
 
+@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS) // for testing purposes
 @WSPersistentConnection
 @WSMapping(path = "/test1")
 public class Test1WSClient extends WSExtClientHandler {
@@ -24,7 +26,7 @@ public class Test1WSClient extends WSExtClientHandler {
 
 	@Override
 	public void init() {
-		super.getWebSocketHandler().DEBUG = true;
+		super.DEBUG = true;
 		LOGGER.info("Test1WS (client) initialized");
 	}
 

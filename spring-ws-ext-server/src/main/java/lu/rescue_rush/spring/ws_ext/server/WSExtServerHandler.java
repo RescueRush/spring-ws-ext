@@ -47,7 +47,7 @@ import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
 import lu.rescue_rush.spring.ws_ext.server.components.WSExtComponent;
 
-public class WSExtServerHandler extends TextWebSocketHandler implements WSExtServer {
+public class WSExtServerHandler extends TextWebSocketHandler {
 
 	public static final String DEBUG_PROPERTY = WSExtServerHandler.class.getSimpleName() + ".debug";
 	public boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
@@ -59,6 +59,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements WSExtSer
 
 	private final Logger LOGGER;
 
+	@Autowired
+	private WSExtServerHandler bean;
 	private final String beanPath;
 	private final Map<String, WSHandlerMethod> methods;
 
@@ -85,20 +87,15 @@ public class WSExtServerHandler extends TextWebSocketHandler implements WSExtSer
 			final Class<?> target = this.getClass();
 
 			final WSMapping beanMapping = target.getAnnotation(WSMapping.class);
+			if (beanMapping == null) {
+				throw new IllegalStateException("Bean " + target.getName() + " is missing @WSMapping annotation.");
+			}
+
 			final WSTimeout timeout = target.getAnnotation(WSTimeout.class);
 
 			final Map<String, WSHandlerMethod> methods = new ConcurrentHashMap<>();
 
-			for (Method proxyMethod : bean.getClass().getDeclaredMethods()) {
-				Method targetMethod = null;
-				try {
-					targetMethod = target.getDeclaredMethod(proxyMethod.getName(), proxyMethod.getParameterTypes());
-				} catch (SecurityException | NoSuchMethodException e) {
-					STATIC_LOGGER.warning("Security exception while accessing method `" + proxyMethod.getName()
-							+ "` in target class. Skipping.");
-					continue;
-				}
-
+			for (Method targetMethod : target.getDeclaredMethods()) {
 				if (!targetMethod.isAnnotationPresent(WSMapping.class)) {
 					continue;
 				}
@@ -111,7 +108,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements WSExtSer
 				final String outPath = normalizeURI(responseMapping == null ? mapping.path() : responseMapping.path());
 				final boolean allowAnonymousFlag = allowAnonymous != null;
 
-				methods.put(mapping.path(), new WSHandlerMethod(proxyMethod, inPath, outPath, allowAnonymousFlag));
+				methods.put(mapping.path(), new WSHandlerMethod(targetMethod, inPath, outPath, allowAnonymousFlag));
 			}
 
 			this.beanPath = beanMapping.path();
@@ -242,13 +239,13 @@ public class WSExtServerHandler extends TextWebSocketHandler implements WSExtSer
 		final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
 		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath,
 				message.getPayload());
-		final Method method = handlerMethod.method();
+		final Method method = handlerMethod.getMethod();
 		badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
 		final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
-		requestPath = handlerMethod.inPath();
+		requestPath = handlerMethod.getInPath();
 		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath,
 				message.getPayload());
-		final String responsePath = handlerMethod.outPath();
+		final String responsePath = handlerMethod.getOutPath();
 
 		final WebSocketSessionData userSession = wsSessionDatas.get(session.getId());
 		userSession.setRequestPath(requestPath);
@@ -276,9 +273,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements WSExtSer
 						.constructType(method.getGenericParameterTypes()[1]);
 				final Object param = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
 
-				returnValue = method.invoke(this, userSession, param);
+				returnValue = method.invoke(bean, userSession, param);
 			} else if (method.getParameterCount() == 1) {
-				returnValue = method.invoke(this, userSession);
+				returnValue = method.invoke(bean, userSession);
 			} else {
 				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: "
 						+ method.getParameterCount());
@@ -596,22 +593,46 @@ public class WSExtServerHandler extends TextWebSocketHandler implements WSExtSer
 
 	}
 
-	public record WSHandlerMethod(Method method, String inPath, String outPath, boolean allowAnonymous) {
+	public class WSHandlerMethod {
+		Method method;
+		String inPath, outPath;
+		boolean allowAnonymous;
+
+		public WSHandlerMethod(Method method, String inPath, String outPath, boolean allowAnonymous) {
+			this.method = method;
+			this.inPath = inPath;
+			this.outPath = outPath;
+			this.allowAnonymous = allowAnonymous;
+		}
+
+		public Method getMethod() {
+			return this.method;
+		}
+
+		public String getInPath() {
+			return this.inPath;
+		}
+
+		public String getOutPath() {
+			return this.outPath;
+		}
+
+		public boolean isAllowAnonymous() {
+			return this.allowAnonymous;
+		}
+
 	}
 
 	/* OVERRIDABLE METHODS */
-	@Override
 	public void init() {
 	}
 
-	@Override
 	public void onConnect(WebSocketSessionData sessionData) {
 		for (WSExtComponent comp : components) {
 			comp.onConnect(sessionData);
 		}
 	}
 
-	@Override
 	public void onDisconnect(WebSocketSessionData sessionData) {
 		for (WSExtComponent comp : components) {
 			comp.onDisconnect(sessionData);

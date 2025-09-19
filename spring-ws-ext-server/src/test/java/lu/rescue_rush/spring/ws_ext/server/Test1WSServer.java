@@ -4,12 +4,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.context.annotation.ScopedProxyMode;
 
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
 import lu.rescue_rush.spring.ws_ext.server.components.WSExtScheduler;
 
+@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS) // for testing purposes
 @AllowAnonymous
 @WSMapping(path = "/test1")
 public class Test1WSServer extends WSExtServerHandler {

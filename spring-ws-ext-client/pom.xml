@@ -67,6 +67,19 @@
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
+		<!-- SERVER TESTS -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-config</artifactId>
+			<version>6.5.2</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-web</artifactId>
+			<version>6.5.2</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 </project>
