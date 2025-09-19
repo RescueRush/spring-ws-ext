@@ -21,6 +21,8 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -41,13 +43,16 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 
 import jakarta.annotation.PostConstruct;
+import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBean;
+import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBeanPostProcessor;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
 import lu.rescue_rush.spring.ws_ext.server.components.WSExtComponent;
 
-public class WSExtServerHandler extends TextWebSocketHandler {
+@ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
+public class WSExtServerHandler extends TextWebSocketHandler implements SelfReferencingBean {
 
 	public static final String DEBUG_PROPERTY = WSExtServerHandler.class.getSimpleName() + ".debug";
 	public boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
@@ -59,7 +64,6 @@ public class WSExtServerHandler extends TextWebSocketHandler {
 
 	private final Logger LOGGER;
 
-	@Autowired
 	private WSExtServerHandler bean;
 	private final String beanPath;
 	private final Map<String, WSHandlerMethod> methods;
@@ -76,6 +80,9 @@ public class WSExtServerHandler extends TextWebSocketHandler {
 
 	private final boolean timeout;
 	private final long timeoutDelay;
+
+	@Autowired
+	private ApplicationContext context;
 
 	@Autowired
 	private ObjectMapper objectMapper;
@@ -490,6 +497,11 @@ public class WSExtServerHandler extends TextWebSocketHandler {
 
 	public String getBeanPath() {
 		return this.beanPath;
+	}
+
+	@Override
+	public void setProxy(Object bean) {
+		this.bean = (WSExtServerHandler) bean;
 	}
 
 	public class WebSocketSessionData {

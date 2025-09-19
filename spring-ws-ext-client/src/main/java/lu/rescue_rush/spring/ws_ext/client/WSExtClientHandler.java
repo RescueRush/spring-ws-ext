@@ -18,6 +18,8 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,10 +39,13 @@ import com.fasterxml.jackson.databind.type.TypeFactory;
 
 import jakarta.annotation.PostConstruct;
 import lu.rescue_rush.spring.ws_ext.client.annotations.WSPersistentConnection;
+import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBean;
+import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBeanPostProcessor;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 
-public abstract class WSExtClientHandler extends TextWebSocketHandler {
+@ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
+public abstract class WSExtClientHandler extends TextWebSocketHandler implements SelfReferencingBean {
 
 	public static final String DEBUG_PROPERTY = WSExtClientHandler.class.getSimpleName() + ".debug";
 	public boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
@@ -55,7 +60,6 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler {
 
 	private final boolean persistentConnection;
 	private final String wsPath;
-	@Autowired
 	private WSExtClientHandler bean;
 	private final Map<String, WSHandlerMethod> methods;
 
@@ -65,6 +69,9 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler {
 
 	private final Object lockObj = new Object();
 	private boolean connectionReady = false;
+
+	@Autowired
+	private ApplicationContext context;
 
 	@Autowired
 	private ObjectMapper objectMapper;
@@ -127,7 +134,6 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler {
 		if (session != null) {
 			synchronized (session) {
 				if (session != null || session.isOpen()) {
-					System.out.println("connect stopped");
 					return;
 				}
 			}
@@ -392,6 +398,11 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler {
 	public boolean isPersistentConnection() {
 		return this.persistentConnection;
 	}
+	
+	@Override
+	public void setProxy(Object bean) {
+		this.bean = (WSExtClientHandler) bean;
+	}
 
 	public class WebSocketSessionData {
 
@@ -440,7 +451,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler {
 		}
 
 	}
-	
+
 	public class WSHandlerMethod {
 		Method method;
 		String inPath, outPath;
