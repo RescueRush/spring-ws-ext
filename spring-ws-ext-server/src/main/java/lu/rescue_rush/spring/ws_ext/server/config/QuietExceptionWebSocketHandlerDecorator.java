@@ -11,9 +11,9 @@ import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
 
 public class QuietExceptionWebSocketHandlerDecorator extends WebSocketHandlerDecorator {
 
-	public static boolean DEBUG = System
-			.getProperty("lu.rescue_rush.spring.ws_ext.config.QuietExceptionWebSocketHandlerDecorator.DEBUG", "false")
-			.equalsIgnoreCase("true");
+	public static final String DEBUG_PROPERTY = QuietExceptionWebSocketHandlerDecorator.class.getSimpleName()
+			+ ".debug";
+	public static boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
 
 	private static final Logger LOGGER = Logger.getLogger(QuietExceptionWebSocketHandlerDecorator.class.getName());
 
@@ -33,9 +33,9 @@ public class QuietExceptionWebSocketHandlerDecorator extends WebSocketHandlerDec
 				}
 			} else {
 				final Throwable rootCause = getRootCause(ex);
-				LOGGER
-						.warning("WebSocket message handling failed: " + ex.getMessage() + " (" + ex.getClass().getSimpleName() + ") -> "
-								+ rootCause.getMessage() + " (" + rootCause.getClass().getSimpleName() + ")");
+				LOGGER.warning(
+						"WebSocket message handling failed: " + ex.getMessage() + " (" + ex.getClass().getSimpleName()
+								+ ") -> " + rootCause.getMessage() + " (" + rootCause.getClass().getSimpleName() + ")");
 				if (DEBUG) {
 					ex.printStackTrace();
 				}
@@ -44,7 +44,8 @@ public class QuietExceptionWebSocketHandlerDecorator extends WebSocketHandlerDec
 			try {
 				session.close(CloseStatus.SERVER_ERROR);
 			} catch (Exception e) {
-				LOGGER.severe("Couldn't close websocket session: " + e.getMessage() + " (" + ex.getClass().getSimpleName() + ")");
+				LOGGER.severe("Couldn't close websocket session: " + e.getMessage() + " ("
+						+ ex.getClass().getSimpleName() + ")");
 				if (DEBUG) {
 					ex.printStackTrace();
 				}

@@ -7,7 +7,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import lu.rescue_rush.spring.ws_ext.server.WebSocketExtServerHandler;
+import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 
 @Documented
 @Inherited
@@ -18,6 +18,6 @@ public @interface WSTimeout {
 
 	boolean value();
 
-	long timeout() default WebSocketExtServerHandler.TIMEOUT;
+	long timeout() default WSExtServerHandler.TIMEOUT;
 
 }

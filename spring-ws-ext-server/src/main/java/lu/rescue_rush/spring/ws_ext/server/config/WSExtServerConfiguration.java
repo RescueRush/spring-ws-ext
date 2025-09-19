@@ -13,7 +13,6 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerMappingRegistry;
-import lu.rescue_rush.spring.ws_ext.server.WSExtServerMappingRegistry.WSHandlerData;
 
 @AutoConfiguration
 @EnableWebSocket
@@ -36,16 +35,16 @@ public class WSExtServerConfiguration implements WebSocketConfigurer {
 		final String[] allowedOrigins = corsConfiguration.getAllowedOrigins() == null ? new String[] { "*" }
 				: corsConfiguration.getAllowedOrigins().toArray(new String[0]);
 
-		for (WSHandlerData handlerBean : registry.getBeans().values()) {
+		for (WSExtServerHandler handlerBean : registry.getBeans().values()) {
 			//@formatter:off
 			handlerRegistry
-					.addHandler(new QuietExceptionWebSocketHandlerDecorator(handlerBean.handler()), handlerBean.path())
+					.addHandler(new QuietExceptionWebSocketHandlerDecorator(handlerBean), handlerBean.getBeanPath())
 					.addInterceptors(authHandshakeInterceptor)
 					.setAllowedOriginPatterns(allowedOrigins);
 			//@formatter:off
 		}
 
-		LOGGER.info("Registered " + registry.getAllBeans().length + " Server WebSocket handlers. [" + registry.getBeans().values().stream().map(WSHandlerData::path).collect(Collectors.joining(", ")) + "]");
+		LOGGER.info("Registered " + registry.getAllBeans().length + " Server WebSocket handlers. [" + registry.getBeans().keySet().stream().collect(Collectors.joining(", ")) + "]");
 	}
 
 }
