@@ -23,7 +23,7 @@ import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionDa
 
 @Component
 @Scope("prototype")
-public class WSExtScheduler extends GenericWSExtComponent {
+public class WSExtScheduler extends GenericWSExtComponent implements ConnectionAwareComponent {
 
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
 
@@ -36,6 +36,10 @@ public class WSExtScheduler extends GenericWSExtComponent {
 			scheduledTasks.entrySet().forEach(e -> e.getValue().removeIf(t -> t.isCancelled() || t.isDone()));
 			scheduledTasks.entrySet().removeIf(e -> e.getValue().isEmpty());
 		}, WSExtServerHandler.PERIODIC_CHECK_DELAY, WSExtServerHandler.PERIODIC_CHECK_DELAY, TimeUnit.MILLISECONDS);
+	}
+
+	@Override
+	public void onConnect(WebSocketSessionData sessionData) {
 	}
 
 	@Override
@@ -97,7 +101,7 @@ public class WSExtScheduler extends GenericWSExtComponent {
 	public <T> void scheduleTask(WebSocketSessionData sessionData, Callable<T> run, String id, long delay,
 			TimeUnit unit) {
 		Objects.requireNonNull(sessionData);
-		
+
 		final ScheduledFuture<T> newTask = executorService.schedule(run, delay, unit);
 
 		scheduledTasks.computeIfAbsent(sessionData.getId(), (k) -> Collections.synchronizedList(new ArrayList<>()));

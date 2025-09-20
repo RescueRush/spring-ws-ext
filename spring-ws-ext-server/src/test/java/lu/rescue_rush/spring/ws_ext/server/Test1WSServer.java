@@ -31,7 +31,7 @@ public class Test1WSServer extends WSExtServerHandler {
 	@Override
 	public void onConnect(WebSocketSessionData sessionData) {
 		LOGGER.info("Sent test from server.");
-		super.send(sessionData, "/test", "test from server to client");
+		sessionData.send("/test", "test from server to client");
 		wsExtScheduler.scheduleTask(sessionData, () -> {
 			System.out.println("Scheduled task executed!");
 		}, "next", 200, TimeUnit.MILLISECONDS);
