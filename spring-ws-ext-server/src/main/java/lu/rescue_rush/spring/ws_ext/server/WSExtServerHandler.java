@@ -172,6 +172,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			this.components = components.toArray(new WSExtComponent[0]);
+			this.connectionAwareComponents = connectionAwareComponents.toArray(new ConnectionAwareComponent[0]);
+			this.transactionAwareComponents = messageAwareComponents.toArray(new TransactionAwareComponent[0]);
 		}
 
 		init();
