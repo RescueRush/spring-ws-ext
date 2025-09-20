@@ -520,6 +520,18 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		return userSessionDatas.values();
 	}
 
+	public int getConnectedUserCount() {
+		return userSessionDatas.size();
+	}
+
+	public int getConnectedSessionCount() {
+		return wsSessions.size();
+	}
+
+	public int getConnectedAnonymousCount() {
+		return wsSessions.size() - userSessionDatas.size();
+	}
+
 	public String getBeanPath() {
 		return this.beanPath;
 	}
