@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -436,7 +437,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				try {
 					wsSession.sendMessage(new TextMessage(json));
 				} catch (IOException e) {
-					e.printStackTrace();
+					LOGGER.warning("Failed to send message to session (" + wsSession.getId() + "): " + e.getMessage());
+					if (DEBUG) {
+						e.printStackTrace();
+					}
 				}
 				count++;
 			} else {
@@ -445,7 +449,39 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		}
 
 		if (DEBUG) {
-			LOGGER.info("Broadcasting message to " + count + " sessions: " + json);
+			LOGGER.info("Broadcasting message to " + count + " sessions on " + destination + ": " + json);
+		}
+
+		return count;
+	}
+
+	public int broadcast(Predicate<WebSocketSessionData> predicate, String destination, Function<WebSocketSessionData, Object> payload) {
+		int count = 0;
+
+		for (WebSocketSessionData wsSessionData : wsSessionDatas.values()) {
+			if (!predicate.test(wsSessionData)) {
+				continue;
+			}
+
+			final WebSocketSession wsSession = wsSessionData.getSession();
+			if (wsSession.isOpen()) {
+				try {
+					final String json = buildPacket(destination, null, payload.apply(wsSessionData));
+					wsSession.sendMessage(new TextMessage(json));
+				} catch (IOException e) {
+					LOGGER.warning("Failed to send message to session (" + wsSession.getId() + "): " + e.getMessage());
+					if (DEBUG) {
+						e.printStackTrace();
+					}
+				}
+				count++;
+			} else {
+				LOGGER.warning("Session is closed: " + wsSession);
+			}
+		}
+
+		if (DEBUG) {
+			LOGGER.info("Broadcasting message to " + count + " sessions on " + destination);
 		}
 
 		return count;
