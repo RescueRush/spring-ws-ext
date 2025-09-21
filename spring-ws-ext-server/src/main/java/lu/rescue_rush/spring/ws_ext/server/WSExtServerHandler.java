@@ -318,6 +318,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				session.sendMessage(new TextMessage(jsonResponse));
 			}
 
+			if (transactionAwareComponents == null)
+				return;
 			for (TransactionAwareComponent comp : transactionAwareComponents) {
 				try {
 					comp.onTransaction(userSession, new MessageData(requestPath, packetId, payloadObj),
@@ -400,6 +402,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				session.sendMessage(new TextMessage(json));
 
 				wsSessionDatas.get(session.getId()).lastPacket = System.currentTimeMillis();
+
+				if (messageAwareComponents == null)
+					return true;
 
 				for (MessageAwareComponent m : messageAwareComponents) {
 					try {
@@ -682,6 +687,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	}
 
 	public void onConnect(WebSocketSessionData sessionData) {
+		if (connectionAwareComponents == null)
+			return;
 		for (ConnectionAwareComponent comp : connectionAwareComponents) {
 			try {
 				comp.onConnect(sessionData);
@@ -696,6 +703,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	}
 
 	public void onDisconnect(WebSocketSessionData sessionData) {
+		if (connectionAwareComponents == null)
+			return;
 		for (ConnectionAwareComponent comp : connectionAwareComponents) {
 			try {
 				comp.onDisconnect(sessionData);
