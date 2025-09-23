@@ -50,7 +50,6 @@ import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
 import lu.rescue_rush.spring.ws_ext.server.components.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.MessageAwareComponent;
 import lu.rescue_rush.spring.ws_ext.server.components.TransactionAwareComponent;
 import lu.rescue_rush.spring.ws_ext.server.components.WSExtComponent;
 
@@ -82,7 +81,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	private List<WSExtComponent> components;
 	private List<ConnectionAwareComponent> connectionAwareComponents;
 	private List<TransactionAwareComponent> transactionAwareComponents;
-	private List<MessageAwareComponent> messageAwareComponents;
 
 	private final boolean timeout;
 	private final long timeoutDelay;
@@ -142,7 +140,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			components = new ArrayList<>();
 			connectionAwareComponents = new ArrayList<>();
 			transactionAwareComponents = new ArrayList<>();
-			messageAwareComponents = new ArrayList<>();
 
 			for (Field f : target.getDeclaredFields()) {
 				if (WSExtComponent.class.isAssignableFrom(f.getType())) {
@@ -294,12 +291,11 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				session.sendMessage(new TextMessage(jsonResponse));
 			}
 
-			if (transactionAwareComponents == null)
-				return;
 			for (TransactionAwareComponent comp : transactionAwareComponents) {
 				try {
 					comp
 							.onTransaction(userSession,
+									returnsVoid ? TransactionDirection.IN : TransactionDirection.IN_OUT,
 									new MessageData(requestPath, packetId, payloadObj),
 									returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
 				} catch (Exception e) {
@@ -381,14 +377,11 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 				wsSessionDatas.get(session.getId()).lastPacket = System.currentTimeMillis();
 
-				if (messageAwareComponents == null)
-					return true;
-
-				for (MessageAwareComponent m : messageAwareComponents) {
+				for (TransactionAwareComponent m : transactionAwareComponents) {
 					try {
-						m.onMessage(sessionData, new MessageData(destination, packetId, null));
+						m.onTransaction(sessionData, TransactionDirection.OUT, null, new MessageData(destination, packetId, null));
 					} catch (Exception e) {
-						LOGGER.warning("Failed to notify MessageAwareComponent '" + m.getClass().getName() + "': " + e.getMessage());
+						LOGGER.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': " + e.getMessage());
 						if (DEBUG) {
 							e.printStackTrace();
 						}
@@ -516,9 +509,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		if (comp instanceof TransactionAwareComponent mac) {
 			transactionAwareComponents.add(mac);
 		}
-		if (comp instanceof MessageAwareComponent mac) {
-			messageAwareComponents.add(mac);
-		}
 
 		comp.setHandlerBean(this);
 		comp.init();
@@ -578,6 +568,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	}
 
 	public static record MessageData(String destination, String packetId, Object payload) {
+	}
+
+	public static enum TransactionDirection {
+		IN, IN_OUT, OUT;
 	}
 
 	public class WebSocketSessionData {

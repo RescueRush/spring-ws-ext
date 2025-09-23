@@ -1,10 +1,11 @@
 package lu.rescue_rush.spring.ws_ext.server.components;
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.MessageData;
+import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.TransactionDirection;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
 
 public interface TransactionAwareComponent extends WSExtComponent {
 
-	void onTransaction(WebSocketSessionData sessionData, MessageData in, MessageData out);
+	void onTransaction(WebSocketSessionData sessionData, TransactionDirection dir, MessageData in, MessageData out);
 
 }
