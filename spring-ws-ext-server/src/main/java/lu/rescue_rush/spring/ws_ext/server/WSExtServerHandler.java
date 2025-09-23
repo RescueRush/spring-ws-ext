@@ -79,10 +79,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
 
-	private WSExtComponent[] components;
-	private ConnectionAwareComponent[] connectionAwareComponents;
-	private TransactionAwareComponent[] transactionAwareComponents;
-	private MessageAwareComponent[] messageAwareComponents;
+	private List<WSExtComponent> components;
+	private List<ConnectionAwareComponent> connectionAwareComponents;
+	private List<TransactionAwareComponent> transactionAwareComponents;
+	private List<MessageAwareComponent> messageAwareComponents;
 
 	private final boolean timeout;
 	private final long timeoutDelay;
@@ -139,9 +139,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			final Object bean = this;
 			final Class<?> target = this.getClass();
 
-			final List<WSExtComponent> components = new ArrayList<>();
-			final List<ConnectionAwareComponent> connectionAwareComponents = new ArrayList<>();
-			final List<TransactionAwareComponent> messageAwareComponents = new ArrayList<>();
+			components = new ArrayList<>();
+			connectionAwareComponents = new ArrayList<>();
+			transactionAwareComponents = new ArrayList<>();
+			messageAwareComponents = new ArrayList<>();
 
 			for (Field f : target.getDeclaredFields()) {
 				if (WSExtComponent.class.isAssignableFrom(f.getType())) {
@@ -149,27 +150,13 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 					try {
 						final WSExtComponent comp = (WSExtComponent) f.get(bean);
 						if (comp != null) {
-							components.add(comp);
-
-							if (comp instanceof ConnectionAwareComponent cac) {
-								connectionAwareComponents.add(cac);
-							}
-							if (comp instanceof TransactionAwareComponent mac) {
-								messageAwareComponents.add(mac);
-							}
-
-							comp.setHandlerBean(this);
-							comp.init();
+							attachComponent(comp);
 						}
 					} catch (IllegalArgumentException | IllegalAccessException e) {
 						LOGGER.warning("Failed to access WSExtComponent field " + f.getName() + ": " + e.getMessage());
 					}
 				}
 			}
-
-			this.components = components.toArray(new WSExtComponent[0]);
-			this.connectionAwareComponents = connectionAwareComponents.toArray(new ConnectionAwareComponent[0]);
-			this.transactionAwareComponents = messageAwareComponents.toArray(new TransactionAwareComponent[0]);
 		}
 
 		init();
@@ -518,6 +505,23 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		WSHandlerMethod bestMatch = methods.get(bestPattern);
 
 		return bestMatch;
+	}
+
+	public void attachComponent(WSExtComponent comp) {
+		components.add(comp);
+
+		if (comp instanceof ConnectionAwareComponent cac) {
+			connectionAwareComponents.add(cac);
+		}
+		if (comp instanceof TransactionAwareComponent mac) {
+			transactionAwareComponents.add(mac);
+		}
+		if (comp instanceof MessageAwareComponent mac) {
+			messageAwareComponents.add(mac);
+		}
+
+		comp.setHandlerBean(this);
+		comp.init();
 	}
 
 	public boolean hasUserSession(UserID ud) {
