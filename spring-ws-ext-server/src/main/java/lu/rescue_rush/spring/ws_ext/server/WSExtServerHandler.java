@@ -280,7 +280,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			if (!returnsVoid) {
-				final String jsonResponse = buildPacket(responsePath, packetId, payload);
+				final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
 
 				if (DEBUG) {
 					LOGGER
