@@ -256,7 +256,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			LocaleContextHolder.setLocale((Locale) session.getAttributes().get("locale"));
 		} else { // user
 			// so that the locale can be changed from a set-lang HTTP request
-			final UserID ud = (UserID) session.getAttributes().get("user");
+			final UserID ud = userSession.getUser(); // .getLocale() // (UserID) session.getAttributes().get("user");
 			if (ud instanceof LocaleHolder) {
 				LocaleContextHolder.setLocale(((LocaleHolder) ud).getLocale());
 			}
