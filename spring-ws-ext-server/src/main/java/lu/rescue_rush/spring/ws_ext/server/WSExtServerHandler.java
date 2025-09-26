@@ -8,10 +8,9 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -23,11 +22,8 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.socket.CloseStatus;
@@ -47,11 +43,13 @@ import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBean;
 import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBeanPostProcessor;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
+import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.MessageData.TransactionDirection;
+import lu.rescue_rush.spring.ws_ext.server.abstr.WSTransactionController;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
-import lu.rescue_rush.spring.ws_ext.server.components.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.TransactionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.WSExtComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.TransactionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.WSExtComponent;
 
 @ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
 public class WSExtServerHandler extends TextWebSocketHandler implements SelfReferencingBean {
@@ -72,7 +70,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	private final Map<String, WebSocketSession> wsSessions = new ConcurrentHashMap<>();
 	private final Map<String, WebSocketSessionData> wsSessionDatas = new ConcurrentHashMap<>();
-	private final Map<Long, WebSocketSessionData> userSessionDatas = new ConcurrentHashMap<>();
 
 	private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
@@ -87,6 +84,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	@Autowired
 	private ObjectMapper objectMapper;
+
+	@Autowired(required = false)
+	private WSTransactionController controller;
 
 	@SuppressWarnings("unused")
 	public WSExtServerHandler() {
@@ -167,9 +167,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			if (!session.isOpen()) {
 				try {
 					if (DEBUG) {
-						LOGGER
-								.info("Removed invalid session (" + (sessionData.isUser() ? sessionData.getUser() : "ANONYMOUS") + " ["
-										+ sessionData.getSession().getId() + "])");
+						LOGGER.info("Removed invalid session [" + sessionData.getSession().getId() + "])");
 					}
 					sessionData.getSession().close(CloseStatus.NORMAL);
 				} catch (IOException e) {
@@ -181,9 +179,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			if (this.timeout && !sessionData.isActive()) {
 				try {
 					if (DEBUG) {
-						LOGGER
-								.info("Removed timed out session (" + (sessionData.isUser() ? sessionData.getUser() : "ANONYMOUS") + " ["
-										+ sessionData.getSession().getId() + "])");
+						LOGGER.info("Removed timed out session [" + sessionData.getSession().getId() + "])");
 					}
 					sessionData.getSession().close(CloseStatus.NORMAL);
 				} catch (IOException e) {
@@ -197,30 +193,17 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	@Override
 	public void afterConnectionEstablished(WebSocketSession session) {
-		final Authentication auth = (Authentication) session.getAttributes().get("auth");
-		SecurityContextHolder.getContext().setAuthentication(auth);
+		final WebSocketSessionData sessionData = new WebSocketSessionData(session.getId(),
+				(Authentication) session.getAttributes().get("auth"), this.beanPath);
 
-		wsSessions.put(session.getId(), session);
-
-		final WebSocketSessionData sessionData;
-
-		if (isAnonymousContext()) { // anonymous user
-			sessionData = new WebSocketSessionData(session.getId(), auth, null, this.beanPath);
-		} else { // logged in user
-			final UserID user = (UserID) auth.getPrincipal();
-			sessionData = new WebSocketSessionData(session.getId(), auth, user, this.beanPath);
-
-			userSessionDatas.put(user.getId(), sessionData);
+		if (controller != null) {
+			controller.beforeTransaction(sessionData);
 		}
 
+		wsSessions.put(session.getId(), session);
 		wsSessionDatas.put(session.getId(), sessionData);
 
 		onConnect(sessionData);
-	}
-
-	private static boolean isAnonymousContext() {
-		final Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-		return auth == null || !auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken;
 	}
 
 	@Override
@@ -235,9 +218,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
 		final JsonNode payload = incomingJson.get("payload");
 
-		final Authentication auth = (Authentication) session.getAttributes().get("auth");
-		SecurityContextHolder.getContext().setAuthentication(auth);
-
 		final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
 		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
 		final Method method = handlerMethod.getMethod();
@@ -249,17 +229,12 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		final WebSocketSessionData userSession = wsSessionDatas.get(session.getId());
 		userSession.setRequestPath(requestPath);
+		userSession.setResponsePath(responsePath);
 		userSession.setPacketId(packetId);
 		userSession.lastPacket = System.currentTimeMillis();
 
-		if (isAnonymousContext()) { // anonymous user
-			LocaleContextHolder.setLocale((Locale) session.getAttributes().get("locale"));
-		} else { // user
-			// so that the locale can be changed from a set-lang HTTP request
-			final UserID ud = userSession.getUser(); // .getLocale() // (UserID) session.getAttributes().get("user");
-			if (ud instanceof LocaleHolder) {
-				LocaleContextHolder.setLocale(((LocaleHolder) ud).getLocale());
-			}
+		if (controller != null) {
+			controller.beforeTransaction(userSession);
 		}
 
 		Exception err = null;
@@ -325,9 +300,11 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 			session.sendMessage(new TextMessage(root.toString()));
 		} finally {
+			if (controller != null) {
+				controller.afterTransaction(userSession);
+			}
+
 			userSession.clearContext();
-			SecurityContextHolder.clearContext();
-			LocaleContextHolder.setLocale(null);
 		}
 
 		if (err != null) {
@@ -349,9 +326,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		wsSessions.remove(session.getId());
 		wsSessionDatas.remove(session.getId());
-
-		if (sessionData.isUser()) {
-			userSessionDatas.remove(sessionData.user.getId());
+		
+		if (controller != null) {
+			controller.afterTransaction(sessionData);
 		}
 
 		onDisconnect(sessionData);
@@ -514,26 +491,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		comp.init();
 	}
 
-	public boolean hasUserSession(UserID ud) {
-		return userSessionDatas.containsKey(ud.getId());
-	}
-
-	public boolean hasUserSession(Long ud) {
-		return userSessionDatas.containsKey(ud);
-	}
-
-	public WebSocketSessionData getUserSession(UserID ud) {
-		return userSessionDatas.get(ud.getId());
-	}
-
-	public WebSocketSessionData getUserSession(Long ud) {
-		return userSessionDatas.get(ud);
-	}
-
-	public List<WebSocketSessionData> getUserSessions(Set<Long> ids) {
-		return ids.stream().map(userSessionDatas::get).filter(Objects::nonNull).toList();
-	}
-
 	public Collection<WebSocketSession> getConnectedSessions() {
 		return wsSessions.values();
 	}
@@ -542,20 +499,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		return wsSessionDatas.values();
 	}
 
-	public Collection<WebSocketSessionData> getConnectedUserSessionDatas() {
-		return userSessionDatas.values();
-	}
-
-	public int getConnectedUserCount() {
-		return userSessionDatas.size();
-	}
-
 	public int getConnectedSessionCount() {
 		return wsSessions.size();
-	}
-
-	public int getConnectedAnonymousCount() {
-		return wsSessions.size() - userSessionDatas.size();
 	}
 
 	public String getBeanPath() {
@@ -567,29 +512,37 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		this.bean = (WSExtServerHandler) bean;
 	}
 
-	public static record MessageData(String destination, String packetId, Object payload) {
+	public boolean hasComponentsOfType(Class<? extends WSExtComponent> clazz) {
+		return components.stream().anyMatch(c -> clazz.isInstance(c));
 	}
 
-	public static enum TransactionDirection {
-		IN, IN_OUT, OUT;
+	public <T extends WSExtComponent> Optional<T> getComponentOfType(Class<T> clazz) {
+		return Optional.ofNullable((T) components.stream().filter(c -> clazz.isInstance(clazz)).findFirst().orElse(null));
+	}
+
+	public static record MessageData(String destination, String packetId, Object payload) {
+		public static enum TransactionDirection {
+			IN, IN_OUT, OUT;
+		}
 	}
 
 	public class WebSocketSessionData {
 
 		private String id;
 		private Authentication auth;
-		private final UserID user;
+		// private final UserID user;
 		private long lastPacket = System.currentTimeMillis();
 		/** the websocket endpoint path (bean path/http) */
 		private final String wsPath;
 		/** the current request path (method inPath/destination) */
 		private String requestPath;
+		private String responsePath;
 		private String packetId;
 
-		public WebSocketSessionData(String id, Authentication auth, UserID user, String wsPath) {
+		public WebSocketSessionData(String id, Authentication auth, /* UserID user, */String wsPath) {
 			this.id = id;
 			this.auth = auth;
-			this.user = user;
+			// this.user = user;
 			this.wsPath = wsPath;
 		}
 
@@ -605,8 +558,16 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			WSExtServerHandler.this.send(this, destination, packetId, payload);
 		}
 
-		public void sendThread(Object payload) {
-			WSExtServerHandler.this.send(this, requestPath, packetId, payload);
+		public void sendAnswer(Object payload) {
+			WSExtServerHandler.this.send(this, responsePath, null, payload);
+		}
+
+		public void sendAnswerThread(String packetId, Object payload) {
+			WSExtServerHandler.this.send(this, responsePath, packetId, payload);
+		}
+
+		public void sendAnswerThread(Object payload) {
+			WSExtServerHandler.this.send(this, responsePath, packetId, payload);
 		}
 
 		public void invalidate() {
@@ -628,9 +589,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			return auth;
 		}
 
-		public UserID getUser() {
-			return user;
-		}
+		/*
+		 * public UserID getUser() { return user; }
+		 */
 
 		public long getLastPing() {
 			return lastPacket;
@@ -652,6 +613,14 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			this.requestPath = requestPath;
 		}
 
+		public String getResponsePath() {
+			return responsePath;
+		}
+
+		public void setResponsePath(String responsePath) {
+			this.responsePath = responsePath;
+		}
+
 		public String getPacketId() {
 			return packetId;
 		}
@@ -664,14 +633,18 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			return packetId != null;
 		}
 
-		public boolean isUser() {
-			return user != null;
-		}
+		/*
+		 * public boolean isUser() { return user != null; }
+		 */
 
 		public void clearContext() {
 			this.requestPath = null;
 			this.packetId = null;
 		}
+
+		/*
+		 * public boolean isAnonymous() { return user == null; }
+		 */
 
 	}
 

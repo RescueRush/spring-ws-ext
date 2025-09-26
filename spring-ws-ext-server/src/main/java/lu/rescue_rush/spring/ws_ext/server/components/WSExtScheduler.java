@@ -20,6 +20,8 @@ import org.springframework.stereotype.Component;
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtComponent;
 
 @Component
 @Scope("prototype")

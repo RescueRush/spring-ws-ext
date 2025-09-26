@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext.server;
+package lu.rescue_rush.spring.ws_ext.server.abstr;
 
 import java.util.Locale;
 
