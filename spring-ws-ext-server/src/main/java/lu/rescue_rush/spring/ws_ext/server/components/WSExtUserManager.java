@@ -23,7 +23,6 @@ import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtComponen
 public class WSExtUserManager extends GenericWSExtComponent implements ConnectionAwareComponent {
 
 	private final Map<Long, WebSocketSessionData> userSessionDatas = new ConcurrentHashMap<>();
-	private final Map<String, UserID> userIDDatas = new ConcurrentHashMap<>();
 
 	@Autowired
 	private WSUserResolver userResolver;
@@ -34,8 +33,7 @@ public class WSExtUserManager extends GenericWSExtComponent implements Connectio
 			return;
 		}
 
-		final UserID userId = userResolver.resolve(sessionData);
-		userIDDatas.put(sessionData.getId(), userId);
+		final UserID userId = userResolver.resolveUser(sessionData);
 		userSessionDatas.put(userId.getId(), sessionData);
 	}
 
@@ -44,21 +42,9 @@ public class WSExtUserManager extends GenericWSExtComponent implements Connectio
 		if (!userResolver.isUser(sessionData)) {
 			return;
 		}
-	
-		final UserID userId = userIDDatas.remove(sessionData.getId());
-		userSessionDatas.remove(userId.getId());
-	}
 
-	public UserID getUser(WebSocketSessionData sessionData) {
-		return userIDDatas.get(sessionData.getId());
-	}
-	
-	public boolean isAnonymous(WebSocketSessionData sessionData) {
-		return !userResolver.isUser(sessionData);
-	}
-	
-	public boolean isUser(WebSocketSessionData sessionData) {
-		return userResolver.isUser(sessionData);
+		final UserID userId = userResolver.resolveUser(sessionData);
+		userSessionDatas.remove(userId.getId());
 	}
 
 	public boolean hasUserSession(UserID ud) {

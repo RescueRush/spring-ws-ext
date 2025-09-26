@@ -13,6 +13,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerMappingRegistry;
+import lu.rescue_rush.spring.ws_ext.server.abstr.WSHandshakeInterceptor;
 
 @AutoConfiguration
 @EnableWebSocket
@@ -25,7 +26,7 @@ public class WSExtServerConfiguration implements WebSocketConfigurer {
 	private WSExtServerMappingRegistry registry;
 
 	@Autowired
-	private AuthHandshakeInterceptor authHandshakeInterceptor;
+	private WSHandshakeInterceptor handshakeInterceptor;
 
 	@Autowired
 	private CorsConfiguration corsConfiguration;
@@ -39,7 +40,7 @@ public class WSExtServerConfiguration implements WebSocketConfigurer {
 			//@formatter:off
 			handlerRegistry
 					.addHandler(new QuietExceptionWebSocketHandlerDecorator(handlerBean), handlerBean.getBeanPath())
-					.addInterceptors(authHandshakeInterceptor)
+					.addInterceptors(handshakeInterceptor)
 					.setAllowedOriginPatterns(allowedOrigins);
 			//@formatter:off
 		}

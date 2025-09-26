@@ -44,6 +44,7 @@ import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBeanPostProcessor;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.MessageData.TransactionDirection;
+import lu.rescue_rush.spring.ws_ext.server.abstr.WSConnectionController;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSTransactionController;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
@@ -86,7 +87,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	private ObjectMapper objectMapper;
 
 	@Autowired(required = false)
-	private WSTransactionController controller;
+	private WSConnectionController connectionController;
+	@Autowired(required = false)
+	private WSTransactionController transactionController;
 
 	@SuppressWarnings("unused")
 	public WSExtServerHandler() {
@@ -120,7 +123,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			this.beanPath = beanMapping.path();
-			this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
+			this.methods = methods.entrySet().stream()
+					.collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
 			this.timeout = timeout != null ? timeout.value() : true;
 			this.timeoutDelay = timeout != null ? timeout.timeout() : WSExtServerHandler.TIMEOUT;
 		}
@@ -171,7 +175,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 					}
 					sessionData.getSession().close(CloseStatus.NORMAL);
 				} catch (IOException e) {
-					LOGGER.warning("Failed to close session (" + sessionData.getSession().getId() + "): " + e.getMessage());
+					LOGGER.warning(
+							"Failed to close session (" + sessionData.getSession().getId() + "): " + e.getMessage());
 				}
 				return true;
 			}
@@ -183,7 +188,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 					}
 					sessionData.getSession().close(CloseStatus.NORMAL);
 				} catch (IOException e) {
-					LOGGER.warning("Failed to close session (" + sessionData.getSession().getId() + "): " + e.getMessage());
+					LOGGER.warning(
+							"Failed to close session (" + sessionData.getSession().getId() + "): " + e.getMessage());
 				}
 				return true;
 			}
@@ -196,8 +202,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		final WebSocketSessionData sessionData = new WebSocketSessionData(session.getId(),
 				(Authentication) session.getAttributes().get("auth"), this.beanPath);
 
-		if (controller != null) {
-			controller.beforeTransaction(sessionData);
+		if (connectionController != null) {
+			connectionController.beforeConnection(sessionData);
 		}
 
 		wsSessions.put(session.getId(), session);
@@ -213,18 +219,21 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		}
 
 		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
-		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.", message.getPayload());
+		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.",
+				message.getPayload());
 		String requestPath = incomingJson.get("destination").asText();
 		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
 		final JsonNode payload = incomingJson.get("payload");
 
 		final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
-		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
+		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath,
+				message.getPayload());
 		final Method method = handlerMethod.getMethod();
 		badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
 		final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
 		requestPath = handlerMethod.getInPath();
-		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath, message.getPayload());
+		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath,
+				message.getPayload());
 		final String responsePath = handlerMethod.getOutPath();
 
 		final WebSocketSessionData userSession = wsSessionDatas.get(session.getId());
@@ -233,8 +242,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		userSession.setPacketId(packetId);
 		userSession.lastPacket = System.currentTimeMillis();
 
-		if (controller != null) {
-			controller.beforeTransaction(userSession);
+		if (transactionController != null) {
+			transactionController.beforeTransaction(userSession);
 		}
 
 		Exception err = null;
@@ -242,15 +251,18 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			Object returnValue = null, payloadObj = null;
 
 			if (method.getParameterCount() == 2) {
-				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
-				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				badRequest(payload == null, session, "Payload expected for destination: " + requestPath,
+						message.getPayload());
+				final JavaType javaType = TypeFactory.defaultInstance()
+						.constructType(method.getGenericParameterTypes()[1]);
 				payloadObj = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
 
 				returnValue = method.invoke(bean, userSession, payloadObj);
 			} else if (method.getParameterCount() == 1) {
 				returnValue = method.invoke(bean, userSession);
 			} else {
-				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
+				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: "
+						+ method.getParameterCount());
 				return;
 			}
 
@@ -258,9 +270,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
 
 				if (DEBUG) {
-					LOGGER
-							.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath + "): "
-									+ jsonResponse);
+					LOGGER.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath
+							+ "): " + jsonResponse);
 				}
 
 				session.sendMessage(new TextMessage(jsonResponse));
@@ -268,13 +279,12 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 			for (TransactionAwareComponent comp : transactionAwareComponents) {
 				try {
-					comp
-							.onTransaction(userSession,
-									returnsVoid ? TransactionDirection.IN : TransactionDirection.IN_OUT,
-									new MessageData(requestPath, packetId, payloadObj),
-									returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
+					comp.onTransaction(userSession, returnsVoid ? TransactionDirection.IN : TransactionDirection.IN_OUT,
+							new MessageData(requestPath, packetId, payloadObj),
+							returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
 				} catch (Exception e) {
-					LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+					LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': "
+							+ e.getMessage());
 					if (DEBUG) {
 						e.printStackTrace();
 					}
@@ -293,15 +303,14 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			if (DEBUG) {
-				LOGGER
-						.info("[" + session.getId() + "] Error while handling message (" + requestPath + "): " + e.getMessage() + " ("
-								+ e.getClass().getName() + ")");
+				LOGGER.info("[" + session.getId() + "] Error while handling message (" + requestPath + "): "
+						+ e.getMessage() + " (" + e.getClass().getName() + ")");
 			}
 
 			session.sendMessage(new TextMessage(root.toString()));
 		} finally {
-			if (controller != null) {
-				controller.afterTransaction(userSession);
+			if (transactionController != null) {
+				transactionController.afterTransaction(userSession);
 			}
 
 			userSession.clearContext();
@@ -326,9 +335,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		wsSessions.remove(session.getId());
 		wsSessionDatas.remove(session.getId());
-		
-		if (controller != null) {
-			controller.afterTransaction(sessionData);
+
+		if (connectionController != null) {
+			connectionController.afterConnection(sessionData);
 		}
 
 		onDisconnect(sessionData);
@@ -356,9 +365,11 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 				for (TransactionAwareComponent m : transactionAwareComponents) {
 					try {
-						m.onTransaction(sessionData, TransactionDirection.OUT, null, new MessageData(destination, packetId, null));
+						m.onTransaction(sessionData, TransactionDirection.OUT, null,
+								new MessageData(destination, packetId, null));
 					} catch (Exception e) {
-						LOGGER.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': " + e.getMessage());
+						LOGGER.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': "
+								+ e.getMessage());
 						if (DEBUG) {
 							e.printStackTrace();
 						}
@@ -412,7 +423,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		return count;
 	}
 
-	public int broadcast(Predicate<WebSocketSessionData> predicate, String destination, Function<WebSocketSessionData, Object> payload) {
+	public int broadcast(Predicate<WebSocketSessionData> predicate, String destination,
+			Function<WebSocketSessionData, Object> payload) {
 		int count = 0;
 
 		for (WebSocketSessionData wsSessionData : wsSessionDatas.values()) {
@@ -517,7 +529,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	}
 
 	public <T extends WSExtComponent> Optional<T> getComponentOfType(Class<T> clazz) {
-		return Optional.ofNullable((T) components.stream().filter(c -> clazz.isInstance(clazz)).findFirst().orElse(null));
+		return components.stream().filter(c -> clazz.isInstance(c)).map(c -> clazz.cast(c)).findFirst();
 	}
 
 	public static record MessageData(String destination, String packetId, Object payload) {
@@ -689,7 +701,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			try {
 				comp.onConnect(sessionData);
 			} catch (Exception e) {
-				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': "
+						+ e.getMessage());
 				if (DEBUG) {
 					e.printStackTrace();
 				}
@@ -704,7 +717,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			try {
 				comp.onDisconnect(sessionData);
 			} catch (Exception e) {
-				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': "
+						+ e.getMessage());
 				if (DEBUG) {
 					e.printStackTrace();
 				}

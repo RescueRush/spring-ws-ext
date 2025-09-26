@@ -1,11 +1,9 @@
 package lu.rescue_rush.spring.ws_ext.server.abstr;
 
-import java.util.Locale;
-
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
 
-public interface WSLocaleResolver {
+public interface WSPrincipalResolver {
 
-	Locale resolveLocale(WebSocketSessionData userSession);
+	<T> T resolvePrincipal(WebSocketSessionData sessionData);
 
 }
