@@ -4,7 +4,6 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -16,7 +15,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSHandshakeInterceptor;
 
 @Component
-@Primary
 public class SimpleHandshakeInterceptor implements WSHandshakeInterceptor {
 
 	private static final Logger LOGGER = Logger.getLogger(SimpleHandshakeInterceptor.class.getName());
