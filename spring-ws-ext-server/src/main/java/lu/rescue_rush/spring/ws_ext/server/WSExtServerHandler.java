@@ -46,6 +46,7 @@ import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.MessageData.Transa
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSConnectionController;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSTransactionController;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
+import lu.rescue_rush.spring.ws_ext.server.annotations.IgnoreNull;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
 import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
 import lu.rescue_rush.spring.ws_ext.server.components.abstr.TransactionAwareComponent;
@@ -113,12 +114,14 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				final WSMapping mapping = targetMethod.getAnnotation(WSMapping.class);
 				final WSResponseMapping responseMapping = targetMethod.getAnnotation(WSResponseMapping.class);
 				final AllowAnonymous allowAnonymous = targetMethod.getAnnotation(AllowAnonymous.class);
+				final IgnoreNull ignoreNull = targetMethod.getAnnotation(IgnoreNull.class);
 
 				final String inPath = normalizeURI(mapping.path());
 				final String outPath = normalizeURI(responseMapping == null ? mapping.path() : responseMapping.path());
 				final boolean allowAnonymousFlag = allowAnonymous != null;
+				final boolean ignoreNullFlag = ignoreNull != null;
 
-				methods.put(mapping.path(), new WSHandlerMethod(targetMethod, inPath, outPath, allowAnonymousFlag));
+				methods.put(mapping.path(), new WSHandlerMethod(targetMethod, inPath, outPath, allowAnonymousFlag, ignoreNullFlag));
 			}
 
 			this.beanPath = beanMapping.path();
@@ -262,7 +265,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				return;
 			}
 
-			if (!returnsVoid) {
+			if (!returnsVoid && !handlerMethod.isIgnoreNull()) {
 				final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
 
 				if (DEBUG) {
@@ -659,13 +662,14 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	public class WSHandlerMethod {
 		Method method;
 		String inPath, outPath;
-		boolean allowAnonymous;
+		boolean allowAnonymous, ignoreNull;
 
-		public WSHandlerMethod(Method method, String inPath, String outPath, boolean allowAnonymous) {
+		public WSHandlerMethod(Method method, String inPath, String outPath, boolean allowAnonymous, boolean ignoreNull) {
 			this.method = method;
 			this.inPath = inPath;
 			this.outPath = outPath;
 			this.allowAnonymous = allowAnonymous;
+			this.ignoreNull = ignoreNull;
 		}
 
 		public Method getMethod() {
@@ -684,6 +688,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			return this.allowAnonymous;
 		}
 
+		public boolean isIgnoreNull() {
+			return ignoreNull;
+		}
+		
 	}
 
 	/* OVERRIDABLE METHODS */
