@@ -264,8 +264,20 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
 				return;
 			}
+			
+			if(returnValue != null && !handlerMethod.isIgnoreNull()) {
+				
+			}
+			
+			// always send response except when it returns void or 
+			//									it's null and it should ignore null returns
+			final boolean sendResponse =
+					 !(
+						returnsVoid || 
+			           (returnValue == null && handlerMethod.isIgnoreNull())
+			          );
 
-			if (!returnsVoid && !handlerMethod.isIgnoreNull()) {
+			if (sendResponse) {
 				final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
 
 				if (DEBUG) {
