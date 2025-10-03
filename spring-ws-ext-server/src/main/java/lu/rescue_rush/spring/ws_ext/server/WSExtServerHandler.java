@@ -265,10 +265,6 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				return;
 			}
 			
-			if(returnValue != null && !handlerMethod.isIgnoreNull()) {
-				
-			}
-			
 			// always send response except when it returns void or 
 			//									it's null and it should ignore null returns
 			final boolean sendResponse =
