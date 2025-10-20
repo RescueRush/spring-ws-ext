@@ -21,11 +21,11 @@ import org.springframework.stereotype.Component;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
 import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtServerComponent;
 
 @Component
 @Scope("prototype")
-public class WSExtScheduler extends GenericWSExtComponent implements ConnectionAwareComponent {
+public class WSExtScheduler extends GenericWSExtServerComponent implements ConnectionAwareComponent {
 
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
 

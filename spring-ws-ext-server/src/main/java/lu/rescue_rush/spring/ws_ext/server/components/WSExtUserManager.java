@@ -19,11 +19,11 @@ import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionDa
 import lu.rescue_rush.spring.ws_ext.server.abstr.UserID;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSUserResolver;
 import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtServerComponent;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class WSExtUserManager extends GenericWSExtComponent implements ConnectionAwareComponent {
+public class WSExtUserManager extends GenericWSExtServerComponent implements ConnectionAwareComponent {
 
 	public static final String DEBUG_PROPERTY = WSExtUserManager.class.getName() + ".debug";
 	public static boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);

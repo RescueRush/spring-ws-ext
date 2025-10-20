@@ -2,7 +2,7 @@ package lu.rescue_rush.spring.ws_ext.server.components.abstr;
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 
-public class GenericWSExtComponent implements WSExtComponent {
+public class GenericWSExtServerComponent implements WSExtServerComponent {
 
 	protected WSExtServerHandler bean;
 

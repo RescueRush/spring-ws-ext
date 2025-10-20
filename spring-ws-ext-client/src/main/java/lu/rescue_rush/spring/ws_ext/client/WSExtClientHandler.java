@@ -3,12 +3,14 @@ package lu.rescue_rush.spring.ws_ext.client;
 import static lu.rescue_rush.spring.ws_ext.common.WSPathUtils.normalizeURI;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,6 +41,11 @@ import com.fasterxml.jackson.databind.type.TypeFactory;
 
 import jakarta.annotation.PostConstruct;
 import lu.rescue_rush.spring.ws_ext.client.annotations.WSPersistentConnection;
+import lu.rescue_rush.spring.ws_ext.client.components.abstr.ConnectionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.client.components.abstr.TransactionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.client.components.abstr.WSExtClientComponent;
+import lu.rescue_rush.spring.ws_ext.common.MessageData;
+import lu.rescue_rush.spring.ws_ext.common.MessageData.TransactionDirection;
 import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBean;
 import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBeanPostProcessor;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
@@ -58,7 +65,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	private WebSocketSession session;
 	private WebSocketSessionData sessionData;
 
-	private final boolean persistentConnection;
+	private boolean persistentConnection;
 	private final String wsPath;
 	private WSExtClientHandler bean;
 	private final Map<String, WSHandlerMethod> methods;
@@ -70,9 +77,12 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	private final Object lockObj = new Object();
 	private boolean connectionReady = false;
 
+	private List<WSExtClientComponent> components;
+	private List<ConnectionAwareComponent> connectionAwareComponents;
+	private List<TransactionAwareComponent> transactionAwareComponents;
+
 	@Autowired
 	private ApplicationContext context;
-
 	@Autowired
 	private ObjectMapper objectMapper;
 
@@ -104,26 +114,97 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			}
 
 			final WSPersistentConnection persistentConnection = target.getAnnotation(WSPersistentConnection.class);
-			final boolean persistentConnectionFlag = persistentConnection == null ? false
-					: persistentConnection.value();
+			final boolean persistentConnectionFlag = persistentConnection == null ? false : persistentConnection.value();
 
 			this.wsPath = wsPath.isEmpty() ? null : wsPath;
 			this.persistentConnection = persistentConnectionFlag;
-			this.methods = methods.entrySet().stream()
-					.collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
+			this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
+			try {
+				this.methods
+						.putIfAbsent("/__error__",
+								new WSHandlerMethod(
+										WSExtClientHandler.class
+												.getDeclaredMethod("handleError", WebSocketSessionData.class, JsonNode.class),
+										"/__error__", "/__error__"));
+			} catch (NoSuchMethodException | SecurityException e) {
+				STATIC_LOGGER.warning("Failed to register default error handler: " + e);
+				if (DEBUG) {
+					e.printStackTrace();
+				}
+			}
 		}
 
-		LOGGER = Logger.getLogger(
-				"WebSocketHandler " + this.getClass().getSimpleName() + (wsPath == null ? "" : " (" + wsPath + ")"));
+		LOGGER = Logger.getLogger("WebSocketHandler # " + this.getClass().getSimpleName() + (wsPath == null ? "" : " (" + wsPath + ")"));
+
 	}
 
 	@PostConstruct
 	private void init_() {
+		// all the beans have been injected at this point
+		scan: {
+			final Object bean = this;
+			final Class<?> target = this.getClass();
+
+			components = new ArrayList<>();
+			connectionAwareComponents = new ArrayList<>();
+			transactionAwareComponents = new ArrayList<>();
+
+			for (Field f : target.getDeclaredFields()) {
+				if (WSExtClientComponent.class.isAssignableFrom(f.getType())) {
+					f.setAccessible(true);
+					try {
+						final WSExtClientComponent comp = (WSExtClientComponent) f.get(bean);
+						if (comp != null) {
+							attachComponent(comp);
+						}
+					} catch (IllegalArgumentException | IllegalAccessException e) {
+						LOGGER.warning("Failed to access WSExtComponent field " + f.getName() + ": " + e.getMessage());
+					}
+				}
+			}
+		}
+
 		init();
 	}
 
 	public void start() {
 		connect();
+	}
+
+	public boolean startRetry(int retries) {
+		final boolean persistentConnectionBackup = this.persistentConnection;
+		this.persistentConnection = false;
+
+		while (!connectionReady) {
+			connect();
+			retries--;
+			if (retries <= 0) {
+				break;
+			}
+		}
+
+		this.persistentConnection = persistentConnectionBackup;
+		return connectionReady;
+	}
+
+	public void disconnect() {
+		this.persistentConnection = false;
+
+		LOGGER.info("Disconnecting WebSocket client...");
+
+		synchronized (session) {
+			if (session != null && session.isOpen()) {
+				try {
+					session.close();
+				} catch (IOException e) {
+					if (DEBUG) {
+						LOGGER.warning("Error while closing WebSocket session: " + e.getMessage());
+					}
+				}
+			}
+		}
+
+		LOGGER.info("Disconnected WebSocket client !");
 	}
 
 	public void scheduleStart() {
@@ -168,6 +249,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 		setSession(session);
 		sessionData = new WebSocketSessionData();
 		ready();
+
 		bean.onConnect(sessionData);
 	}
 
@@ -191,9 +273,13 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			LOGGER.info("Received message: " + message.getPayload());
 		}
 
+		if (sessionData == null || session == null || !session.isOpen() || !connectionReady) {
+			LOGGER.warning("Received message after the session was closed.");
+			return;
+		}
+
 		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
-		badRequest(!incomingJson.has("destination"), "Invalid packet format: missing 'destination' field.",
-				message.getPayload());
+		badRequest(!incomingJson.has("destination"), "Invalid packet format: missing 'destination' field.", message.getPayload());
 		String requestPath = incomingJson.get("destination").asText();
 		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
 		final JsonNode payload = incomingJson.get("payload");
@@ -204,8 +290,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 		badRequest(method == null, "No method attached for destination: " + requestPath, message.getPayload());
 		final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
 		requestPath = handlerMethod.getInPath();
-		badRequest(requestPath == null, "No request path defined for destination: " + requestPath,
-				message.getPayload());
+		badRequest(requestPath == null, "No request path defined for destination: " + requestPath, message.getPayload());
 		final String responsePath = handlerMethod.getOutPath();
 
 		sessionData.setRequestPath(requestPath);
@@ -214,20 +299,22 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 		Exception err = null;
 		try {
-			Object returnValue = null;
+			Object returnValue = null, payloadObj = null;
 
 			if (method.getParameterCount() == 2) {
 				badRequest(payload == null, "Payload expected for destination: " + requestPath, message.getPayload());
-				final JavaType javaType = TypeFactory.defaultInstance()
-						.constructType(method.getGenericParameterTypes()[1]);
-				final Object param = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+				if (javaType.isTypeOrSuperTypeOf(JsonNode.class)) {
+					payloadObj = payload;
+				} else {
+					payloadObj = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+				}
 
-				returnValue = method.invoke(bean, sessionData, param);
+				returnValue = method.invoke(bean, sessionData, payloadObj);
 			} else if (method.getParameterCount() == 1) {
 				returnValue = method.invoke(bean, sessionData);
 			} else {
-				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: "
-						+ method.getParameterCount());
+				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
 				return;
 			}
 
@@ -246,11 +333,27 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 				session.sendMessage(new TextMessage(jsonResponse));
 			}
+
+			for (TransactionAwareComponent comp : transactionAwareComponents) {
+				try {
+					comp
+							.onTransaction(sessionData,
+									returnsVoid ? TransactionDirection.IN : TransactionDirection.IN_OUT,
+									new MessageData(requestPath, packetId, payloadObj),
+									returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
+				} catch (Exception e) {
+					LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+					if (DEBUG) {
+						e.printStackTrace();
+					}
+				}
+			}
 		} catch (Exception e) {
 			err = e;
 
 			final ObjectNode root = objectMapper.createObjectNode();
 			root.put("status", 500);
+			root.put("destination", "/__error__");
 			root.set("packet", incomingJson);
 
 			if (e instanceof ResponseStatusException rse) {
@@ -262,7 +365,14 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 		}
 
 		if (err != null) {
-			throw err;
+			throw new RuntimeException(
+					"Exception caught while handling packet for '" + requestPath + "' from packed: " + incomingJson.toPrettyString(), err);
+		}
+	}
+
+	protected void handleError(WebSocketSessionData sessionData, JsonNode packet) {
+		if (DEBUG) {
+			LOGGER.warning("[" + sessionData.getSession().getId() + "] Error packet received: " + packet.toString());
 		}
 	}
 
@@ -310,6 +420,17 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			session.sendMessage(new TextMessage(json));
 
 			sessionData.lastPacket = System.currentTimeMillis();
+
+			for (TransactionAwareComponent m : transactionAwareComponents) {
+				try {
+					m.onTransaction(sessionData, TransactionDirection.OUT, null, new MessageData(destination, packetId, null));
+				} catch (Exception e) {
+					LOGGER.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': " + e.getMessage());
+					if (DEBUG) {
+						e.printStackTrace();
+					}
+				}
+			}
 		} catch (IOException e) {
 			throw new RuntimeException("Exception caught while sending packet.", e);
 		}
@@ -317,6 +438,10 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 	public void send(String destination, Object payload) {
 		send(destination, null, payload);
+	}
+
+	public void send(String destination) {
+		send(destination, null, null);
 	}
 
 	private String buildPacket(String destination, String packetId, Object payload) {
@@ -335,20 +460,19 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 	public WSHandlerMethod resolveMethod(String requestPath) {
 		requestPath = normalizeURI(requestPath);
+
 		final List<String> matchingPatterns = new ArrayList<>();
 		for (String pattern : methods.keySet()) {
 			if (pathMatcher.match(pattern, requestPath)) {
 				matchingPatterns.add(pattern);
 			}
 		}
-
-		if (matchingPatterns.isEmpty()) {
-			return null;
-		}
-
 		matchingPatterns.sort(pathMatcher.getPatternComparator(requestPath));
-		String bestPattern = matchingPatterns.get(0);
-		WSHandlerMethod bestMatch = methods.get(bestPattern);
+		if (matchingPatterns.isEmpty())
+			return null;
+
+		final String bestPattern = matchingPatterns.get(0);
+		final WSHandlerMethod bestMatch = methods.get(bestPattern);
 
 		return bestMatch;
 	}
@@ -356,6 +480,9 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	protected void setSession(WebSocketSession session) {
 		if (this.session != session && DEBUG) {
 			LOGGER.info("WebSocketSession instance changed for some reason.");
+		}
+		if (session == null) {
+			LOGGER.info("WebSocketSession instance closed.");
 		}
 		this.session = session;
 	}
@@ -370,22 +497,21 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			return true;
 		} catch (InterruptedException e) {
 			if (DEBUG) {
-				LOGGER.warning(
-						"Thread: " + Thread.currentThread().getName() + " interrupted while awaiting connection");
+				LOGGER.warning("Thread: " + Thread.currentThread().getName() + " interrupted while awaiting connection");
 			}
 			Thread.interrupted();
 			return false;
 		}
 	}
 
-	public void ready() {
+	protected void ready() {
 		synchronized (lockObj) {
 			connectionReady = true;
 			lockObj.notifyAll();
 		}
 	}
 
-	public void block() {
+	protected void block() {
 		synchronized (lockObj) {
 			connectionReady = false;
 		}
@@ -398,10 +524,32 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	public boolean isPersistentConnection() {
 		return this.persistentConnection;
 	}
-	
+
 	@Override
 	public void setProxy(Object bean) {
 		this.bean = (WSExtClientHandler) bean;
+	}
+
+	public void attachComponent(WSExtClientComponent comp) {
+		components.add(comp);
+
+		if (comp instanceof ConnectionAwareComponent cac) {
+			connectionAwareComponents.add(cac);
+		}
+		if (comp instanceof TransactionAwareComponent mac) {
+			transactionAwareComponents.add(mac);
+		}
+
+		comp.setHandlerBean(this);
+		comp.init();
+	}
+
+	public boolean hasComponentsOfType(Class<? extends WSExtClientComponent> clazz) {
+		return components.stream().anyMatch(c -> clazz.isInstance(c));
+	}
+
+	public <T extends WSExtClientComponent> Optional<T> getComponentOfType(Class<T> clazz) {
+		return components.stream().filter(c -> clazz.isInstance(c)).map(c -> clazz.cast(c)).findFirst();
 	}
 
 	public class WebSocketSessionData {
@@ -480,13 +628,38 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 	public abstract URI buildRemoteURI();
 
+	/* OVERRIDABLE METHODS */
 	public void init() {
 	}
 
 	public void onConnect(WebSocketSessionData sessionData) {
+		if (connectionAwareComponents == null)
+			return;
+		for (ConnectionAwareComponent comp : connectionAwareComponents) {
+			try {
+				comp.onConnect(sessionData);
+			} catch (Exception e) {
+				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+				if (DEBUG) {
+					e.printStackTrace();
+				}
+			}
+		}
 	}
 
 	public void onDisconnect(WebSocketSessionData sessionData) {
+		if (connectionAwareComponents == null)
+			return;
+		for (ConnectionAwareComponent comp : connectionAwareComponents) {
+			try {
+				comp.onDisconnect(sessionData);
+			} catch (Exception e) {
+				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+				if (DEBUG) {
+					e.printStackTrace();
+				}
+			}
+		}
 	}
 
 }

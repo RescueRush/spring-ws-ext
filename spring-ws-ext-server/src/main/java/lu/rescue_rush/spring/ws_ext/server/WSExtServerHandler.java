@@ -38,11 +38,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 
 import jakarta.annotation.PostConstruct;
+import lu.rescue_rush.spring.ws_ext.common.MessageData;
+import lu.rescue_rush.spring.ws_ext.common.MessageData.TransactionDirection;
 import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBean;
 import lu.rescue_rush.spring.ws_ext.common.SelfReferencingBeanPostProcessor;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
-import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.MessageData.TransactionDirection;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSConnectionController;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSTransactionController;
 import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
@@ -50,7 +51,7 @@ import lu.rescue_rush.spring.ws_ext.server.annotations.IgnoreNull;
 import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
 import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
 import lu.rescue_rush.spring.ws_ext.server.components.abstr.TransactionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.WSExtComponent;
+import lu.rescue_rush.spring.ws_ext.server.components.abstr.WSExtServerComponent;
 
 @ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
 public class WSExtServerHandler extends TextWebSocketHandler implements SelfReferencingBean {
@@ -76,7 +77,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
 
-	private List<WSExtComponent> components;
+	private List<WSExtServerComponent> components;
 	private List<ConnectionAwareComponent> connectionAwareComponents;
 	private List<TransactionAwareComponent> transactionAwareComponents;
 
@@ -126,6 +127,19 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 			this.beanPath = beanMapping.path();
 			this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
+			try {
+				this.methods
+						.putIfAbsent("/__error__",
+								new WSHandlerMethod(
+										WSExtServerHandler.class
+												.getDeclaredMethod("handleError", WebSocketSessionData.class, JsonNode.class),
+										"/__error__", "/__error__", true, true));
+			} catch (NoSuchMethodException | SecurityException e) {
+				STATIC_LOGGER.warning("Failed to register default error handler: " + e);
+				if (DEBUG) {
+					e.printStackTrace();
+				}
+			}
 			this.timeout = timeout != null ? timeout.value() : true;
 			this.timeoutDelay = timeout != null ? timeout.timeout() : WSExtServerHandler.TIMEOUT;
 		}
@@ -147,10 +161,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			transactionAwareComponents = new ArrayList<>();
 
 			for (Field f : target.getDeclaredFields()) {
-				if (WSExtComponent.class.isAssignableFrom(f.getType())) {
+				if (WSExtServerComponent.class.isAssignableFrom(f.getType())) {
 					f.setAccessible(true);
 					try {
-						final WSExtComponent comp = (WSExtComponent) f.get(bean);
+						final WSExtServerComponent comp = (WSExtServerComponent) f.get(bean);
 						if (comp != null) {
 							attachComponent(comp);
 						}
@@ -255,7 +269,11 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			if (method.getParameterCount() == 2) {
 				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
 				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
-				payloadObj = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+				if (javaType.isTypeOrSuperTypeOf(JsonNode.class)) {
+					payloadObj = payload;
+				} else {
+					payloadObj = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+				}
 
 				returnValue = method.invoke(bean, userSession, payloadObj);
 			} else if (method.getParameterCount() == 1) {
@@ -300,6 +318,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 			final ObjectNode root = objectMapper.createObjectNode();
 			root.put("status", 500);
+			root.put("destination", "/__error__");
 			root.set("packet", incomingJson);
 
 			if (e instanceof ResponseStatusException rse) {
@@ -324,6 +343,12 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		if (err != null) {
 			throw err;
+		}
+	}
+
+	protected void handleError(WebSocketSessionData sessionData, JsonNode packet) {
+		if (DEBUG) {
+			LOGGER.warning("[" + sessionData.getSession().getId() + "] Error packet received: " + packet.toString());
 		}
 	}
 
@@ -372,6 +397,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 					if (DEBUG) {
 						LOGGER.info("[" + session.getId() + "] Sending message (" + destination + "): " + json);
+					}
+
+					if (!session.isOpen()) {
+						LOGGER.warning("Session is closed: " + session);
 					}
 
 					session.sendMessage(new TextMessage(json));
@@ -491,6 +520,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	public WSHandlerMethod resolveMethod(String requestPath) {
 		requestPath = normalizeURI(requestPath);
+
 		final List<String> matchingPatterns = new ArrayList<>();
 		for (String pattern : methods.keySet()) {
 			if (pathMatcher.match(pattern, requestPath)) {
@@ -498,13 +528,16 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 		}
 		matchingPatterns.sort(pathMatcher.getPatternComparator(requestPath));
-		String bestPattern = matchingPatterns.get(0);
-		WSHandlerMethod bestMatch = methods.get(bestPattern);
+		if (matchingPatterns.isEmpty())
+			return null;
+
+		final String bestPattern = matchingPatterns.get(0);
+		final WSHandlerMethod bestMatch = methods.get(bestPattern);
 
 		return bestMatch;
 	}
 
-	public void attachComponent(WSExtComponent comp) {
+	public void attachComponent(WSExtServerComponent comp) {
 		components.add(comp);
 
 		if (comp instanceof ConnectionAwareComponent cac) {
@@ -539,18 +572,12 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		this.bean = (WSExtServerHandler) bean;
 	}
 
-	public boolean hasComponentsOfType(Class<? extends WSExtComponent> clazz) {
+	public boolean hasComponentsOfType(Class<? extends WSExtServerComponent> clazz) {
 		return components.stream().anyMatch(c -> clazz.isInstance(c));
 	}
 
-	public <T extends WSExtComponent> Optional<T> getComponentOfType(Class<T> clazz) {
+	public <T extends WSExtServerComponent> Optional<T> getComponentOfType(Class<T> clazz) {
 		return components.stream().filter(c -> clazz.isInstance(c)).map(c -> clazz.cast(c)).findFirst();
-	}
-
-	public static record MessageData(String destination, String packetId, Object payload) {
-		public static enum TransactionDirection {
-			IN, IN_OUT, OUT;
-		}
 	}
 
 	public class WebSocketSessionData {
@@ -608,9 +635,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			return wsSessions.get(this.id);
 		}
 
-		/*
-		 * public UserID getUser() { return user; }
-		 */
+		public boolean isOpen() {
+			final WebSocketSession session = getSession();
+			return session != null && session.isOpen();
+		}
 
 		public long getLastPing() {
 			return lastPacket;
