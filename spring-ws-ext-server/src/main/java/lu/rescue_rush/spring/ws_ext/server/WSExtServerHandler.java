@@ -136,7 +136,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	}
 
 	@PostConstruct
-	private void init_() {
+	protected void init_() {
 		// all the beans have been injected at this point
 		scan: {
 			final Object bean = this;
@@ -264,14 +264,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
 				return;
 			}
-			
-			// always send response except when it returns void or 
-			//									it's null and it should ignore null returns
-			final boolean sendResponse =
-					 !(
-						returnsVoid || 
-			           (returnValue == null && handlerMethod.isIgnoreNull())
-			          );
+
+			// always send response except when it returns void or
+			// it's null and it should ignore null returns
+			final boolean sendResponse = !(returnsVoid || (returnValue == null && handlerMethod.isIgnoreNull()));
 
 			if (sendResponse) {
 				final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
@@ -358,7 +354,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		if (transactionController != null) {
 			transactionController.afterTransaction(sessionData);
 		}
-		
+
 		wsSessions.remove(session.getId());
 		wsSessionDatas.remove(session.getId());
 	}
@@ -369,38 +365,42 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		final WebSocketSession session = sessionData.getSession();
 
-		if (session.isOpen()) {
-			try {
-				final String json = buildPacket(destination, packetId, payload);
+		synchronized (session) {
+			if (session.isOpen()) {
+				try {
+					final String json = buildPacket(destination, packetId, payload);
 
-				if (DEBUG) {
-					LOGGER.info("[" + session.getId() + "] Sending message (" + destination + "): " + json);
-				}
+					if (DEBUG) {
+						LOGGER.info("[" + session.getId() + "] Sending message (" + destination + "): " + json);
+					}
 
-				session.sendMessage(new TextMessage(json));
+					session.sendMessage(new TextMessage(json));
 
-				wsSessionDatas.get(session.getId()).lastPacket = System.currentTimeMillis();
+					wsSessionDatas.get(session.getId()).lastPacket = System.currentTimeMillis();
 
-				for (TransactionAwareComponent m : transactionAwareComponents) {
-					try {
-						m.onTransaction(sessionData, TransactionDirection.OUT, null, new MessageData(destination, packetId, null));
-					} catch (Exception e) {
-						LOGGER.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': " + e.getMessage());
-						if (DEBUG) {
-							e.printStackTrace();
+					for (TransactionAwareComponent m : transactionAwareComponents) {
+						try {
+							m.onTransaction(sessionData, TransactionDirection.OUT, null, new MessageData(destination, packetId, null));
+						} catch (Exception e) {
+							LOGGER
+									.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': "
+											+ e.getMessage());
+							if (DEBUG) {
+								e.printStackTrace();
+							}
 						}
 					}
-				}
 
-				return true;
-			} catch (IOException e) {
-				LOGGER.warning("Failed to send message to session (" + session.getId() + "): " + e.getMessage());
-				if (DEBUG) {
-					e.printStackTrace();
+					return true;
+				} catch (IOException e) {
+					LOGGER.warning("Failed to send message to session (" + session.getId() + "): " + e);
+					if (DEBUG) {
+						e.printStackTrace();
+					}
 				}
+			} else {
+				LOGGER.warning("Session is closed: " + session);
 			}
-		} else {
-			LOGGER.warning("Session is closed: " + session);
 		}
 
 		return false;
@@ -624,6 +624,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			return wsPath;
 		}
 
+		public WSExtServerHandler getWsHandlerBean() {
+			return bean;
+		}
+
 		public String getRequestPath() {
 			return requestPath;
 		}
@@ -699,7 +703,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		public boolean isIgnoreNull() {
 			return ignoreNull;
 		}
-		
+
 	}
 
 	/* OVERRIDABLE METHODS */
