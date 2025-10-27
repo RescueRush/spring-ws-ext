@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext.server.annotations;
+package lu.rescue_rush.spring.ws_ext.server.annotation;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

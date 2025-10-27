@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext.server.components;
+package lu.rescue_rush.spring.ws_ext.server.component;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -18,19 +18,18 @@ import org.springframework.web.socket.CloseStatus;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
 import lu.rescue_rush.spring.ws_ext.server.abstr.UserID;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSUserResolver;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtServerComponent;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.ConnectionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.GenericWSExtServerComponent;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class WSExtUserManager extends GenericWSExtServerComponent implements ConnectionAwareComponent {
+public class WSUserManager extends GenericWSExtServerComponent implements ConnectionAwareComponent {
 
-	public static final String DEBUG_PROPERTY = WSExtUserManager.class.getName() + ".debug";
+	public static final String DEBUG_PROPERTY = WSUserManager.class.getName() + ".debug";
 	public static boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
+	private final static Logger STATIC_LOGGER = Logger.getLogger(WSUserManager.class.getName());
 
-	private final static Logger STATIC_LOGGER = Logger.getLogger(WSExtUserManager.class.getName());
 	private final Map<Long, WebSocketSessionData> userSessionDatas = new ConcurrentHashMap<>();
-
 	private Logger LOGGER;
 
 	@Autowired
@@ -39,7 +38,7 @@ public class WSExtUserManager extends GenericWSExtServerComponent implements Con
 	@Override
 	public void init() {
 		DEBUG |= super.bean.DEBUG;
-		LOGGER = Logger.getLogger(WSExtUserManager.class.getSimpleName() + " # " + super.bean.getBeanPath());
+		LOGGER = Logger.getLogger(WSUserManager.class.getSimpleName() + " # " + super.bean.getBeanPath());
 	}
 
 	@Override
@@ -48,22 +47,29 @@ public class WSExtUserManager extends GenericWSExtServerComponent implements Con
 			return;
 		}
 
-		final UserID userId = userResolver.resolveUser(sessionData);
+		final UserID user = userResolver.resolveUser(sessionData);
 
-		if (userSessionDatas.containsKey(userId.getId())) {
+		if (userSessionDatas.containsKey(user.getId())) {
 			// user already connected, disconnect previous session
-			final WebSocketSessionData previousSession = userSessionDatas.get(userId.getId());
-			try {
-				previousSession.getSession().close(CloseStatus.POLICY_VIOLATION);
-			} catch (IOException e) {
-				LOGGER.warning("Failed to disconnect previous session for user ID " + userId.getId() + ": " + e);
+			final WebSocketSessionData previousSession = userSessionDatas.get(user.getId());
+			if (previousSession.isOpen()) {
 				if (DEBUG) {
-					e.printStackTrace();
+					LOGGER.warning("User " + user + " is already connected to " + super.bean.getBeanPath() + ", closing old connection.");
 				}
+				try {
+					previousSession.getSession().close(CloseStatus.POLICY_VIOLATION);
+				} catch (IOException e) {
+					LOGGER.warning("Failed to disconnect previous session for user ID: " + user + ": " + e);
+					if (DEBUG) {
+						e.printStackTrace();
+					}
+				}
+			} else {
+				LOGGER.warning("Previous session was invalid but still cached for user ID: " + user + ", ignoring.");
 			}
 		}
 
-		userSessionDatas.put(userId.getId(), sessionData);
+		userSessionDatas.put(user.getId(), sessionData);
 	}
 
 	@Override
@@ -84,11 +90,30 @@ public class WSExtUserManager extends GenericWSExtServerComponent implements Con
 		return userSessionDatas.containsKey(ud);
 	}
 
+	public void checkStatus(UserID ud) {
+		checkStatus(ud.getId());
+	}
+
+	public void checkStatus(long ud) {
+		if (!hasUserSession(ud)) {
+			return;
+		}
+
+		try {
+			userSessionDatas.get(ud).checkStatus();
+		} catch (IOException e) {
+			LOGGER.severe("Couldn't check session's status for user: " + ud + ": " + e);
+			if (DEBUG) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 	public WebSocketSessionData getUserSession(UserID ud) {
 		return userSessionDatas.get(ud.getId());
 	}
 
-	public WebSocketSessionData getUserSession(Long ud) {
+	public WebSocketSessionData getUserSession(long ud) {
 		return userSessionDatas.get(ud);
 	}
 

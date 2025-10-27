@@ -46,12 +46,13 @@ import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSConnectionController;
 import lu.rescue_rush.spring.ws_ext.server.abstr.WSTransactionController;
-import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
-import lu.rescue_rush.spring.ws_ext.server.annotations.IgnoreNull;
-import lu.rescue_rush.spring.ws_ext.server.annotations.WSTimeout;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.TransactionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.WSExtServerComponent;
+import lu.rescue_rush.spring.ws_ext.server.annotation.AllowAnonymous;
+import lu.rescue_rush.spring.ws_ext.server.annotation.IgnoreNull;
+import lu.rescue_rush.spring.ws_ext.server.annotation.WSTimeout;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.ConnectionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.TransactionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.WSExtServerComponent;
+import lu.rescue_rush.spring.ws_ext.server.config.QuietExceptionWebSocketHandlerDecorator;
 
 @ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
 public class WSExtServerHandler extends TextWebSocketHandler implements SelfReferencingBean {
@@ -59,8 +60,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	public static final String DEBUG_PROPERTY = WSExtServerHandler.class.getSimpleName() + ".debug";
 	public boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
 
-	public static final long TIMEOUT = 60_000, // 60 seconds
-			PERIODIC_CHECK_DELAY = 10_000;
+	public static final long TIMEOUT = 60_000;
+	public static final long PERIODIC_CHECK_DELAY = 10_000;
+	public static final String ERROR_HANDLER_ENDPOINT = "/__error__";
 
 	private static final Logger STATIC_LOGGER = Logger.getLogger(WSExtServerHandler.class.getName());
 
@@ -152,25 +154,23 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	@PostConstruct
 	protected void init_() {
 		// all the beans have been injected at this point
-		scan: {
-			final Object bean = this;
-			final Class<?> target = this.getClass();
+		final Object bean = this;
+		final Class<?> target = this.getClass();
 
-			components = new ArrayList<>();
-			connectionAwareComponents = new ArrayList<>();
-			transactionAwareComponents = new ArrayList<>();
+		components = new ArrayList<>();
+		connectionAwareComponents = new ArrayList<>();
+		transactionAwareComponents = new ArrayList<>();
 
-			for (Field f : target.getDeclaredFields()) {
-				if (WSExtServerComponent.class.isAssignableFrom(f.getType())) {
-					f.setAccessible(true);
-					try {
-						final WSExtServerComponent comp = (WSExtServerComponent) f.get(bean);
-						if (comp != null) {
-							attachComponent(comp);
-						}
-					} catch (IllegalArgumentException | IllegalAccessException e) {
-						LOGGER.warning("Failed to access WSExtComponent field " + f.getName() + ": " + e.getMessage());
+		for (Field f : target.getDeclaredFields()) {
+			if (WSExtServerComponent.class.isAssignableFrom(f.getType())) {
+				f.setAccessible(true);
+				try {
+					final WSExtServerComponent comp = (WSExtServerComponent) f.get(bean);
+					if (comp != null) {
+						attachComponent(comp);
 					}
+				} catch (IllegalArgumentException | IllegalAccessException e) {
+					LOGGER.warning("Failed to access WSExtComponent field " + f.getName() + ": " + e.getMessage());
 				}
 			}
 		}
@@ -212,7 +212,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	@Override
 	public void afterConnectionEstablished(WebSocketSession session) {
-		final WebSocketSessionData sessionData = new WebSocketSessionData(session.getId(), this.beanPath);
+		final WebSocketSessionData sessionData = new WebSocketSessionData(session.getId());
 		wsSessions.put(session.getId(), session);
 		wsSessionDatas.put(session.getId(), sessionData);
 
@@ -233,119 +233,140 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	@Override
 	protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-		if (DEBUG) {
-			LOGGER.info("[" + session.getId() + "] Received message: " + message.getPayload());
-		}
+		synchronized (session) {
+			if (DEBUG) {
+				LOGGER.info("[" + session.getId() + "] Received message: " + message.getPayload());
+			}
 
-		final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
-		badRequest(!incomingJson.has("destination"), session, "Invalid packet format: missing 'destination' field.", message.getPayload());
-		String requestPath = incomingJson.get("destination").asText();
-		final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
-		final JsonNode payload = incomingJson.get("payload");
+			final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
+			badRequest(!incomingJson.has("destination"),
+					session,
+					"Invalid packet format: missing 'destination' field.",
+					message.getPayload());
+			String requestPath = incomingJson.get("destination").asText();
+			final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
+			final JsonNode payload = incomingJson.get("payload");
 
-		final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
-		badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
-		final Method method = handlerMethod.getMethod();
-		badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
-		final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
-		requestPath = handlerMethod.getInPath();
-		badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath, message.getPayload());
-		final String responsePath = handlerMethod.getOutPath();
+			final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
+			badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
+			final Method method = handlerMethod.getMethod();
+			badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
+			final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
+			requestPath = handlerMethod.getInPath();
+			badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath, message.getPayload());
+			final String responsePath = handlerMethod.getOutPath();
 
-		final WebSocketSessionData userSession = wsSessionDatas.get(session.getId());
-		userSession.setRequestPath(requestPath);
-		userSession.setResponsePath(responsePath);
-		userSession.setPacketId(packetId);
-		userSession.lastPacket = System.currentTimeMillis();
+			final WebSocketSessionData sessionData = wsSessionDatas.get(session.getId());
+			sessionData.setRequestPath(requestPath);
+			sessionData.setResponsePath(responsePath);
+			sessionData.setPacketId(packetId);
+			sessionData.lastPacket = System.currentTimeMillis();
 
-		if (transactionController != null) {
-			transactionController.beforeTransaction(userSession);
-		}
+			if (transactionController != null) {
+				transactionController.beforeTransaction(sessionData);
+			}
 
-		Exception err = null;
-		try {
-			Object returnValue = null, payloadObj = null;
+			Exception err = null;
+			try {
+				Object returnValue = null, payloadObj = null;
 
-			if (method.getParameterCount() == 2) {
-				badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
-				final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
-				if (javaType.isTypeOrSuperTypeOf(JsonNode.class)) {
-					payloadObj = payload;
+				if (method.getParameterCount() == 2) {
+					badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
+					final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
+					if (javaType.isTypeOrSuperTypeOf(JsonNode.class)) {
+						payloadObj = payload;
+					} else {
+						payloadObj = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+					}
+
+					returnValue = method.invoke(bean, sessionData, payloadObj);
+				} else if (method.getParameterCount() == 1) {
+					returnValue = method.invoke(bean, sessionData);
 				} else {
-					payloadObj = objectMapper.readValue(objectMapper.treeAsTokens(payload), javaType);
+					LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
+					return;
 				}
 
-				returnValue = method.invoke(bean, userSession, payloadObj);
-			} else if (method.getParameterCount() == 1) {
-				returnValue = method.invoke(bean, userSession);
-			} else {
-				LOGGER.warning("Method " + method.getName() + " has an invalid number of parameters: " + method.getParameterCount());
-				return;
-			}
+				// always send response except when it returns void or
+				// it's null and it should ignore null returns
+				final boolean sendResponse = !(returnsVoid || (returnValue == null && handlerMethod.isIgnoreNull()));
 
-			// always send response except when it returns void or
-			// it's null and it should ignore null returns
-			final boolean sendResponse = !(returnsVoid || (returnValue == null && handlerMethod.isIgnoreNull()));
+				if (sendResponse) {
+					final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
 
-			if (sendResponse) {
-				final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
-
-				if (DEBUG) {
-					LOGGER
-							.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath + "): "
-									+ jsonResponse);
-				}
-
-				session.sendMessage(new TextMessage(jsonResponse));
-			}
-
-			for (TransactionAwareComponent comp : transactionAwareComponents) {
-				try {
-					comp
-							.onTransaction(userSession,
-									returnsVoid ? TransactionDirection.IN : TransactionDirection.IN_OUT,
-									new MessageData(requestPath, packetId, payloadObj),
-									returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
-				} catch (Exception e) {
-					LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
 					if (DEBUG) {
-						e.printStackTrace();
+						LOGGER
+								.info("[" + session.getId() + "] Sending response (" + requestPath + " -> " + responsePath + "): "
+										+ jsonResponse);
+					}
+
+					session.sendMessage(new TextMessage(jsonResponse));
+				}
+
+				for (TransactionAwareComponent comp : transactionAwareComponents) {
+					try {
+						comp
+								.onTransaction(sessionData,
+										returnsVoid ? TransactionDirection.IN : TransactionDirection.IN_OUT,
+										new MessageData(requestPath, packetId, payloadObj),
+										returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
+					} catch (Exception e) {
+						LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
+						if (DEBUG) {
+							e.printStackTrace();
+						}
 					}
 				}
+			} catch (Exception e) {
+				err = e;
+
+				final ObjectNode root = objectMapper.createObjectNode();
+				root.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+				root.set("packet", incomingJson);
+
+				if (e instanceof ResponseStatusException rse) {
+					root.put("status", rse.getStatusCode().value());
+					root.put("message", rse.getReason());
+				}
+
+				if (handleMessageError(sessionData, incomingJson, err)) {
+					sessionData.send(ERROR_HANDLER_ENDPOINT, packetId, root);
+				}
+			} finally {
+				if (transactionController != null) {
+					transactionController.afterTransaction(sessionData);
+				}
+
+				sessionData.clearContext();
 			}
-		} catch (Exception e) {
-			err = e;
-
-			final ObjectNode root = objectMapper.createObjectNode();
-			root.put("status", 500);
-			root.put("destination", "/__error__");
-			root.set("packet", incomingJson);
-
-			if (e instanceof ResponseStatusException rse) {
-				root.put("status", rse.getStatusCode().value());
-				root.put("message", rse.getReason());
-			}
-
-			if (DEBUG) {
-				LOGGER
-						.info("[" + session.getId() + "] Error while handling message (" + requestPath + "): " + e.getMessage() + " ("
-								+ e.getClass().getName() + ")");
-			}
-
-			session.sendMessage(new TextMessage(root.toString()));
-		} finally {
-			if (transactionController != null) {
-				transactionController.afterTransaction(userSession);
-			}
-
-			userSession.clearContext();
-		}
-
-		if (err != null) {
-			throw err;
 		}
 	}
 
+	/**
+	 * To override: handles the caught exception when handling an {@link #handleTextMessage() incoming
+	 * packet}.<br>
+	 * By default: logs the error and prints the stack trace if in {@link #DEBUG} mode.<br>
+	 * Throwing any exception will pass it to the {@link QuietExceptionWebSocketHandlerDecorator}, which
+	 * will close the session without forwarding the exception. It is recommended to handle errors using
+	 * {@link WebSocketSessionData#close} if needed.
+	 * 
+	 * @return weather the exception will be forwarded to the client (default: true)
+	 */
+	protected boolean handleMessageError(WebSocketSessionData sessionData, JsonNode incomingJson, Exception e) {
+		if (DEBUG) {
+			LOGGER
+					.severe("[" + sessionData.getId() + "] Error while handling message (" + sessionData.getRequestPath() + "): "
+							+ e.getMessage() + " (" + e.getClass().getName() + ")");
+			e.printStackTrace();
+		} else {
+			LOGGER.severe("Error when handling incoming packet: " + e);
+		}
+		return true;
+	}
+
+	/**
+	 * To override: Incoming {@link #ERROR_HANDLER_ENDPOINT} handler
+	 */
 	protected void handleError(WebSocketSessionData sessionData, JsonNode packet) {
 		if (DEBUG) {
 			LOGGER.warning("[" + sessionData.getSession().getId() + "] Error packet received: " + packet.toString());
@@ -353,10 +374,12 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	}
 
 	protected void badRequest(boolean b, WebSocketSession session, String msg, String content) {
-		if (!b)
+		if (!b) {
 			return;
-		if (DEBUG)
+		}
+		if (DEBUG) {
 			LOGGER.warning("[" + session.getId() + "] " + msg + " (" + content + ")");
+		}
 		throw new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
 	}
 
@@ -387,6 +410,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	private boolean send(WebSocketSessionData sessionData, String destination, String packetId, Object payload) {
 		Objects.requireNonNull(sessionData);
 		Objects.requireNonNull(destination);
+
+		if (!sessionData.isValid()) {
+			return false;
+		}
 
 		final WebSocketSession session = sessionData.getSession();
 
@@ -441,7 +468,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		final String json = buildPacket(destination, null, payload);
 
 		for (WebSocketSessionData wsSessionData : wsSessionDatas.values()) {
-			if (!predicate.test(wsSessionData)) {
+			if (!wsSessionData.isValid() || !predicate.test(wsSessionData)) {
 				continue;
 			}
 
@@ -472,7 +499,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		int count = 0;
 
 		for (WebSocketSessionData wsSessionData : wsSessionDatas.values()) {
-			if (!predicate.test(wsSessionData)) {
+			if (!wsSessionData.isValid() || !predicate.test(wsSessionData)) {
 				continue;
 			}
 
@@ -504,7 +531,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		return broadcast((s) -> true, destination, payload);
 	}
 
-	private String buildPacket(String destination, String packetId, Object payload) {
+	protected String buildPacket(String destination, String packetId, Object payload) {
 		try {
 			final ObjectNode root = objectMapper.createObjectNode();
 			root.set("payload", objectMapper.valueToTree(payload));
@@ -528,8 +555,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 		}
 		matchingPatterns.sort(pathMatcher.getPatternComparator(requestPath));
-		if (matchingPatterns.isEmpty())
+		if (matchingPatterns.isEmpty()) {
 			return null;
+		}
 
 		final String bestPattern = matchingPatterns.get(0);
 		final WSHandlerMethod bestMatch = methods.get(bestPattern);
@@ -582,19 +610,18 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	public class WebSocketSessionData {
 
-		private String id;
+		private boolean valid = true;
+
+		private final String id;
 		// private final UserID user;
 		private long lastPacket = System.currentTimeMillis();
-		/** the websocket endpoint path (bean path/http) */
-		private final String wsPath;
 		/** the current request path (method inPath/destination) */
 		private String requestPath;
 		private String responsePath;
 		private String packetId;
 
-		public WebSocketSessionData(String id, String wsPath) {
+		public WebSocketSessionData(String id) {
 			this.id = id;
-			this.wsPath = wsPath;
 		}
 
 		public void send(String destination, String packetId, Object payload) {
@@ -621,10 +648,13 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			WSExtServerHandler.this.send(this, responsePath, packetId, payload);
 		}
 
-		public void invalidate() {
+		/**
+		 * this has to get called at the end, only by the WSExtServerHandler and no other component(s)
+		 */
+		void invalidate() {
 			clearContext();
 
-			id = null;
+			valid = false;
 		}
 
 		public String getId() {
@@ -632,12 +662,23 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		}
 
 		public WebSocketSession getSession() {
+			if (id == null) { // session invalidated
+				throw new IllegalStateException("This session is invalid and should be used further.");
+			}
+			return getSessionInternal();
+		}
+
+		WebSocketSession getSessionInternal() {
 			return wsSessions.get(this.id);
 		}
 
+		public boolean isValid() {
+			return valid;
+		}
+
 		public boolean isOpen() {
-			final WebSocketSession session = getSession();
-			return session != null && session.isOpen();
+			final WebSocketSession session = getSessionInternal();
+			return isValid() && session != null && session.isOpen();
 		}
 
 		public long getLastPing() {
@@ -645,11 +686,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		}
 
 		public boolean isActive() {
-			return System.currentTimeMillis() - lastPacket < timeoutDelay;
-		}
-
-		public String getWsPath() {
-			return wsPath;
+			return (System.currentTimeMillis() - lastPacket) < timeoutDelay;
 		}
 
 		public WSExtServerHandler getWsHandlerBean() {
@@ -680,29 +717,58 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			this.packetId = packetId;
 		}
 
+		public boolean hasRequestPath() {
+			return requestPath != null;
+		}
+
 		public boolean hasPacketId() {
 			return packetId != null;
 		}
 
-		/*
-		 * public boolean isUser() { return user != null; }
-		 */
-
-		public void clearContext() {
+		void clearContext() {
 			this.requestPath = null;
 			this.packetId = null;
 		}
 
-		/*
-		 * public boolean isAnonymous() { return user == null; }
+		public void close(CloseStatus closeStatus) throws IOException {
+			if (!isValid()) {
+				checkStatus();
+				return;
+			}
+
+			final WebSocketSession session = getSession();
+
+			synchronized (session) {
+				session.close(closeStatus);
+			}
+		}
+
+		public void close() throws IOException {
+			close(CloseStatus.NORMAL);
+		}
+
+		/**
+		 * Checks if the session is valid (not invalidated and opened) and if it's still correctly
+		 * registered. Else closes the connection with the code {@link CloseStatus.SERVER_ERROR}.
 		 */
+		public void checkStatus() throws IOException {
+			if (isValid() && wsSessionDatas.containsKey(this.id) && wsSessions.containsKey(this.id)) {
+				return;
+			} else {
+				close(CloseStatus.SERVER_ERROR);
+			}
+		}
 
 	}
 
 	public class WSHandlerMethod {
-		Method method;
-		String inPath, outPath;
-		boolean allowAnonymous, ignoreNull;
+		private final Method method;
+
+		private final String inPath;
+		private final String outPath;
+
+		private final boolean allowAnonymous;
+		private final boolean ignoreNull;
 
 		public WSHandlerMethod(Method method, String inPath, String outPath, boolean allowAnonymous, boolean ignoreNull) {
 			this.method = method;
@@ -730,6 +796,12 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		public boolean isIgnoreNull() {
 			return ignoreNull;
+		}
+
+		@Override
+		public String toString() {
+			return "WSHandlerMethod [method=" + method + ", inPath=" + inPath + ", outPath=" + outPath + ", allowAnonymous="
+					+ allowAnonymous + ", ignoreNull=" + ignoreNull + "]";
 		}
 
 	}

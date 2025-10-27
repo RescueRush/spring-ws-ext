@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext.server.annotations;
+package lu.rescue_rush.spring.ws_ext.server.annotation;
 
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;

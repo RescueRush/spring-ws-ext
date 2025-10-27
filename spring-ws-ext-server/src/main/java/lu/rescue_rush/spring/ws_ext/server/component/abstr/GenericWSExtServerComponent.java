@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext.server.components.abstr;
+package lu.rescue_rush.spring.ws_ext.server.component.abstr;
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 

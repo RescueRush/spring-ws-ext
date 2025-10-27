@@ -9,8 +9,8 @@ import org.springframework.context.annotation.ScopedProxyMode;
 
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
-import lu.rescue_rush.spring.ws_ext.server.annotations.AllowAnonymous;
-import lu.rescue_rush.spring.ws_ext.server.components.WSExtScheduler;
+import lu.rescue_rush.spring.ws_ext.server.annotation.AllowAnonymous;
+import lu.rescue_rush.spring.ws_ext.server.component.WSScheduler;
 
 @Scope(proxyMode = ScopedProxyMode.TARGET_CLASS) // for testing purposes
 @AllowAnonymous
@@ -20,7 +20,7 @@ public class Test1WSServer extends WSExtServerHandler {
 	private static final Logger LOGGER = Logger.getLogger(Test1WSServer.class.getName());
 
 	@Autowired
-	private WSExtScheduler wsExtScheduler;
+	private WSScheduler wsExtScheduler;
 
 	@Override
 	public void init() {

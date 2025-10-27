@@ -1,4 +1,4 @@
-package lu.rescue_rush.spring.ws_ext.server.components;
+package lu.rescue_rush.spring.ws_ext.server.component;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -20,12 +20,12 @@ import org.springframework.stereotype.Component;
 
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.ConnectionAwareComponent;
-import lu.rescue_rush.spring.ws_ext.server.components.abstr.GenericWSExtServerComponent;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.ConnectionAwareComponent;
+import lu.rescue_rush.spring.ws_ext.server.component.abstr.GenericWSExtServerComponent;
 
 @Component
 @Scope("prototype")
-public class WSExtScheduler extends GenericWSExtServerComponent implements ConnectionAwareComponent {
+public class WSScheduler extends GenericWSExtServerComponent implements ConnectionAwareComponent {
 
 	private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
 
