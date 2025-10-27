@@ -19,7 +19,7 @@ public class WSSingleConnectionFactory implements DynamicAutowireFactory {
 
 	@Override
 	public WSSingleConnection create(String name) {
-		LOGGER.info("Creating WSSingleConnectionComponent with name: " + name);
+		LOGGER.info("Creating WSSingleConnection with name: " + name);
 		return new WSSingleConnection(name);
 	}
 

@@ -131,11 +131,11 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
 			try {
 				this.methods
-						.putIfAbsent("/__error__",
+						.putIfAbsent(ERROR_HANDLER_ENDPOINT,
 								new WSHandlerMethod(
 										WSExtServerHandler.class
-												.getDeclaredMethod("handleError", WebSocketSessionData.class, JsonNode.class),
-										"/__error__", "/__error__", true, true));
+												.getDeclaredMethod("handleIncomingError", WebSocketSessionData.class, JsonNode.class),
+										ERROR_HANDLER_ENDPOINT, ERROR_HANDLER_ENDPOINT, true, true));
 			} catch (NoSuchMethodException | SecurityException e) {
 				STATIC_LOGGER.warning("Failed to register default error handler: " + e);
 				if (DEBUG) {
@@ -239,39 +239,46 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			final JsonNode incomingJson = objectMapper.readTree(message.getPayload());
-			badRequest(!incomingJson.has("destination"),
-					session,
-					"Invalid packet format: missing 'destination' field.",
-					message.getPayload());
-			String requestPath = incomingJson.get("destination").asText();
-			final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
-			final JsonNode payload = incomingJson.get("payload");
-
-			final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
-			badRequest(handlerMethod == null, session, "No method found for destination: " + requestPath, message.getPayload());
-			final Method method = handlerMethod.getMethod();
-			badRequest(method == null, session, "No method attached for destination: " + requestPath, message.getPayload());
-			final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
-			requestPath = handlerMethod.getInPath();
-			badRequest(requestPath == null, session, "No request path defined for destination: " + requestPath, message.getPayload());
-			final String responsePath = handlerMethod.getOutPath();
 
 			final WebSocketSessionData sessionData = wsSessionDatas.get(session.getId());
-			sessionData.setRequestPath(requestPath);
-			sessionData.setResponsePath(responsePath);
-			sessionData.setPacketId(packetId);
 			sessionData.lastPacket = System.currentTimeMillis();
 
-			if (transactionController != null) {
-				transactionController.beforeTransaction(sessionData);
-			}
-
 			Exception err = null;
+
 			try {
+				badRequest(!incomingJson.has("destination"),
+						sessionData,
+						"Invalid packet format: missing 'destination' field.",
+						message.getPayload());
+				String requestPath = incomingJson.get("destination").asText();
+				sessionData.setRequestPath(requestPath);
+
+				final String packetId = incomingJson.has("packetId") ? incomingJson.get("packetId").asText() : null;
+				sessionData.setPacketId(packetId);
+
+				final JsonNode payload = incomingJson.get("payload");
+
+				final WSHandlerMethod handlerMethod = resolveMethod(requestPath);
+				badRequest(handlerMethod == null, sessionData, "No method found for destination: " + requestPath, message.getPayload());
+				final Method method = handlerMethod.getMethod();
+				badRequest(method == null, sessionData, "No method attached for destination: " + requestPath, message.getPayload());
+				final boolean returnsVoid = method.getReturnType().equals(Void.TYPE);
+				requestPath = handlerMethod.getInPath();
+				badRequest(requestPath == null,
+						sessionData,
+						"No request path defined for destination: " + requestPath,
+						message.getPayload());
+				final String responsePath = handlerMethod.getOutPath();
+				sessionData.setResponsePath(responsePath);
+
+				if (transactionController != null) {
+					transactionController.beforeTransaction(sessionData);
+				}
+
 				Object returnValue = null, payloadObj = null;
 
 				if (method.getParameterCount() == 2) {
-					badRequest(payload == null, session, "Payload expected for destination: " + requestPath, message.getPayload());
+					badRequest(payload == null, sessionData, "Payload expected for destination: " + requestPath, message.getPayload());
 					final JavaType javaType = TypeFactory.defaultInstance().constructType(method.getGenericParameterTypes()[1]);
 					if (javaType.isTypeOrSuperTypeOf(JsonNode.class)) {
 						payloadObj = payload;
@@ -330,7 +337,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				}
 
 				if (handleMessageError(sessionData, incomingJson, err)) {
-					sessionData.send(ERROR_HANDLER_ENDPOINT, packetId, root);
+					sessionData.sendThread(ERROR_HANDLER_ENDPOINT, root);
 				}
 			} finally {
 				if (transactionController != null) {
@@ -367,18 +374,18 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	/**
 	 * To override: Incoming {@link #ERROR_HANDLER_ENDPOINT} handler
 	 */
-	protected void handleError(WebSocketSessionData sessionData, JsonNode packet) {
+	protected void handleIncomingError(WebSocketSessionData sessionData, JsonNode packet) {
 		if (DEBUG) {
 			LOGGER.warning("[" + sessionData.getSession().getId() + "] Error packet received: " + packet.toString());
 		}
 	}
 
-	protected void badRequest(boolean b, WebSocketSession session, String msg, String content) {
+	protected void badRequest(boolean b, WebSocketSessionData sessionData, String msg, String content) {
 		if (!b) {
 			return;
 		}
 		if (DEBUG) {
-			LOGGER.warning("[" + session.getId() + "] " + msg + " (" + content + ")");
+			LOGGER.warning("[" + sessionData.getId() + "] " + msg + " (" + content + ")");
 		}
 		throw new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
 	}
@@ -632,18 +639,30 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			WSExtServerHandler.this.send(this, destination, null, payload);
 		}
 
+		/**
+		 * Preserves the packet id
+		 */
 		public void sendThread(String destination, Object payload) {
 			WSExtServerHandler.this.send(this, destination, packetId, payload);
 		}
 
+		/**
+		 * Send the packet to the response path
+		 */
 		public void sendAnswer(Object payload) {
 			WSExtServerHandler.this.send(this, responsePath, null, payload);
 		}
 
+		/**
+		 * Send the packet to the response path
+		 */
 		public void sendAnswerThread(String packetId, Object payload) {
 			WSExtServerHandler.this.send(this, responsePath, packetId, payload);
 		}
 
+		/**
+		 * Preserves the packet id and sends the packet to the response path
+		 */
 		public void sendAnswerThread(Object payload) {
 			WSExtServerHandler.this.send(this, responsePath, packetId, payload);
 		}

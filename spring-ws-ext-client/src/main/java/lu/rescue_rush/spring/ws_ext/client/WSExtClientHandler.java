@@ -20,7 +20,6 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.AntPathMatcher;
@@ -59,6 +58,8 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 	private static final Logger STATIC_LOGGER = Logger.getLogger(WSExtClientHandler.class.getName());
 
+	public static final String ERROR_HANDLER_ENDPOINT = "/__error__";
+
 	private final Logger LOGGER;
 
 	private StandardWebSocketClient client;
@@ -81,8 +82,6 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	private List<ConnectionAwareComponent> connectionAwareComponents;
 	private List<TransactionAwareComponent> transactionAwareComponents;
 
-	@Autowired
-	private ApplicationContext context;
 	@Autowired
 	private ObjectMapper objectMapper;
 
@@ -121,11 +120,11 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			this.methods = methods.entrySet().stream().collect(Collectors.toMap(k -> normalizeURI(k.getKey()), v -> v.getValue()));
 			try {
 				this.methods
-						.putIfAbsent("/__error__",
+						.putIfAbsent(ERROR_HANDLER_ENDPOINT,
 								new WSHandlerMethod(
 										WSExtClientHandler.class
-												.getDeclaredMethod("handleError", WebSocketSessionData.class, JsonNode.class),
-										"/__error__", "/__error__"));
+												.getDeclaredMethod("handleIncomingError", WebSocketSessionData.class, JsonNode.class),
+										ERROR_HANDLER_ENDPOINT, ERROR_HANDLER_ENDPOINT));
 			} catch (NoSuchMethodException | SecurityException e) {
 				STATIC_LOGGER.warning("Failed to register default error handler: " + e);
 				if (DEBUG) {
@@ -353,7 +352,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 			final ObjectNode root = objectMapper.createObjectNode();
 			root.put("status", 500);
-			root.put("destination", "/__error__");
+			root.put("destination", ERROR_HANDLER_ENDPOINT);
 			root.set("packet", incomingJson);
 
 			if (e instanceof ResponseStatusException rse) {
@@ -370,7 +369,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 		}
 	}
 
-	protected void handleError(WebSocketSessionData sessionData, JsonNode packet) {
+	protected void handleIncomingError(WebSocketSessionData sessionData, JsonNode packet) {
 		if (DEBUG) {
 			LOGGER.warning("[" + sessionData.getSession().getId() + "] Error packet received: " + packet.toString());
 		}
