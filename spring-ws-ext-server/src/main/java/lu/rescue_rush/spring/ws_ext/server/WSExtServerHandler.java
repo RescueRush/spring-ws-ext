@@ -146,7 +146,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			this.timeoutDelay = timeout != null ? timeout.timeout() : WSExtServerHandler.TIMEOUT;
 		}
 
-		this.LOGGER = Logger.getLogger("WebSocketHandler " + beanPath);
+		this.LOGGER = Logger.getLogger("WSExtServer # " + beanPath);
 
 		schedulePeriodicCleanup();
 	}
@@ -329,12 +329,13 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 				final ObjectNode root = objectMapper.createObjectNode();
 				root.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-				root.set("packet", incomingJson);
 
 				if (e instanceof ResponseStatusException rse) {
 					root.put("status", rse.getStatusCode().value());
 					root.put("message", rse.getReason());
 				}
+
+				root.set("payload", incomingJson);
 
 				if (handleMessageError(sessionData, incomingJson, err)) {
 					sessionData.sendThread(ERROR_HANDLER_ENDPOINT, root);
@@ -473,6 +474,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		int count = 0;
 
 		final String json = buildPacket(destination, null, payload);
+		final TextMessage msg = new TextMessage(json);
 
 		for (WebSocketSessionData wsSessionData : wsSessionDatas.values()) {
 			if (!wsSessionData.isValid() || !predicate.test(wsSessionData)) {
@@ -480,18 +482,20 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			final WebSocketSession wsSession = wsSessionData.getSession();
-			if (wsSession.isOpen()) {
-				try {
-					wsSession.sendMessage(new TextMessage(json));
-				} catch (IOException e) {
-					LOGGER.warning("Failed to send message to session (" + wsSession.getId() + "): " + e.getMessage());
-					if (DEBUG) {
-						e.printStackTrace();
+			synchronized (wsSession) {
+				if (wsSession.isOpen()) {
+					try {
+						wsSession.sendMessage(msg);
+					} catch (IOException e) {
+						LOGGER.warning("Failed to send message to session (" + wsSession.getId() + "): " + e.getMessage());
+						if (DEBUG) {
+							e.printStackTrace();
+						}
 					}
+					count++;
+				} else {
+					LOGGER.warning("Session is closed: " + wsSession);
 				}
-				count++;
-			} else {
-				LOGGER.warning("Session is closed: " + wsSession);
 			}
 		}
 
@@ -511,19 +515,21 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			final WebSocketSession wsSession = wsSessionData.getSession();
-			if (wsSession.isOpen()) {
-				try {
-					final String json = buildPacket(destination, null, payload.apply(wsSessionData));
-					wsSession.sendMessage(new TextMessage(json));
-				} catch (IOException e) {
-					LOGGER.warning("Failed to send message to session (" + wsSession.getId() + "): " + e.getMessage());
-					if (DEBUG) {
-						e.printStackTrace();
+			synchronized (wsSession) {
+				if (wsSession.isOpen()) {
+					try {
+						final String json = buildPacket(destination, null, payload.apply(wsSessionData));
+						wsSession.sendMessage(new TextMessage(json));
+					} catch (IOException e) {
+						LOGGER.warning("Failed to send message to session (" + wsSession.getId() + "): " + e.getMessage());
+						if (DEBUG) {
+							e.printStackTrace();
+						}
 					}
+					count++;
+				} else {
+					LOGGER.warning("Session is closed: " + wsSession);
 				}
-				count++;
-			} else {
-				LOGGER.warning("Session is closed: " + wsSession);
 			}
 		}
 
@@ -592,6 +598,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	public Collection<WebSocketSessionData> getConnectedSessionDatas() {
 		return wsSessionDatas.values();
+	}
+
+	public WebSocketSessionData getConnectionSessionData(String id) {
+		return wsSessionDatas.get(id);
 	}
 
 	public int getConnectedSessionCount() {

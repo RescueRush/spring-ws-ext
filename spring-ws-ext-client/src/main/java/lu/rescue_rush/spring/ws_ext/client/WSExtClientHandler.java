@@ -133,7 +133,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			}
 		}
 
-		LOGGER = Logger.getLogger("WebSocketHandler # " + this.getClass().getSimpleName() + (wsPath == null ? "" : " (" + wsPath + ")"));
+		LOGGER = Logger.getLogger("WSExtClient # " + this.getClass().getSimpleName() + (wsPath == null ? "" : " (" + wsPath + ")"));
 
 	}
 
@@ -364,8 +364,8 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 		}
 
 		if (err != null) {
-			throw new RuntimeException(
-					"Exception caught while handling packet for '" + requestPath + "' from packed: " + incomingJson.toPrettyString(), err);
+			throw new RuntimeException("Exception caught while handling packet for '" + requestPath + "': " + incomingJson.toPrettyString(),
+					err);
 		}
 	}
 

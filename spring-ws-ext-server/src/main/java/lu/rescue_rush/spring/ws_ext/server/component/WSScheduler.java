@@ -94,6 +94,7 @@ public class WSScheduler extends GenericWSExtServerComponent implements Connecti
 		Objects.requireNonNull(sessionData);
 		Objects.requireNonNull(run);
 		Objects.requireNonNull(id);
+		Objects.requireNonNull(unit);
 		scheduleTask(sessionData, (Callable<Void>) () -> {
 			run.run();
 			return null;
@@ -103,6 +104,9 @@ public class WSScheduler extends GenericWSExtServerComponent implements Connecti
 	public <T> void scheduleTask(WebSocketSessionData sessionData, Callable<T> run, String id, long delay,
 			TimeUnit unit) {
 		Objects.requireNonNull(sessionData);
+		Objects.requireNonNull(run);
+		Objects.requireNonNull(id);
+		Objects.requireNonNull(unit);
 
 		final ScheduledFuture<T> newTask = executorService.schedule(run, delay, unit);
 
