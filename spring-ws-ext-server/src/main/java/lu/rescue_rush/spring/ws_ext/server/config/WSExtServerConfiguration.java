@@ -33,6 +33,7 @@ public class WSExtServerConfiguration implements WebSocketConfigurer {
 
 	@Override
 	public void registerWebSocketHandlers(WebSocketHandlerRegistry handlerRegistry) {
+		// TODO: @UnKabaraQuiDev make this compatible with origin patterns
 		final String[] allowedOrigins = corsConfiguration.getAllowedOrigins() == null ? new String[] { "*" }
 				: corsConfiguration.getAllowedOrigins().toArray(new String[0]);
 

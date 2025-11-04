@@ -21,12 +21,16 @@ public class SimpleHandshakeInterceptor implements WSHandshakeInterceptor {
 
 	public static final String HTTP_ATTRIBUTE_AUTH = "auth";
 	public static final String HTTP_ATTRIBUTE_LOCALE = "locale";
+	public static final String HTTP_ATTRIBUTE_ID = "session_id";
 
 	@Autowired
 	private LocaleResolver localeResolver;
 
 	@Override
-	public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler,
+	public boolean beforeHandshake(
+			ServerHttpRequest request,
+			ServerHttpResponse response,
+			WebSocketHandler wsHandler,
 			Map<String, Object> attributes) throws Exception {
 		final ServletServerHttpRequest servletRequest = (ServletServerHttpRequest) request;
 		final HttpServletRequest httpRequest = servletRequest.getServletRequest();
@@ -38,8 +42,7 @@ public class SimpleHandshakeInterceptor implements WSHandshakeInterceptor {
 	}
 
 	@Override
-	public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler,
-			Exception exception) {
+	public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler, Exception exception) {
 	}
 
 }
