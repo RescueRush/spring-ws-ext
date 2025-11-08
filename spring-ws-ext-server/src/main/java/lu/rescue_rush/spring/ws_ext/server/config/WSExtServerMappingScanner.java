@@ -15,14 +15,16 @@ public class WSExtServerMappingScanner {
 
 	private final Logger LOGGER = Logger.getLogger(WSExtServerMappingScanner.class.getName());
 
-	@Autowired
+	@Autowired(required = false)
 	private List<WSExtServerHandler> serverHandlers;
 
 	@Bean
 	public WSExtServerMappingRegistry wsExtServerMappingRegistry() {
 		final WSExtServerMappingRegistry registry = new WSExtServerMappingRegistry();
 
-		serverHandlers.forEach(registry::register);
+		if (serverHandlers != null) {
+			serverHandlers.forEach(registry::register);
+		}
 
 		return registry;
 	}

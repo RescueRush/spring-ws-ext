@@ -6,6 +6,7 @@ import java.util.logging.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
+import org.springframework.stereotype.Component;
 
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSMapping;
 import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
@@ -15,6 +16,7 @@ import lu.rescue_rush.spring.ws_ext.server.component.WSScheduler;
 @Scope(proxyMode = ScopedProxyMode.TARGET_CLASS) // for testing purposes
 @AllowAnonymous
 @WSMapping(path = "/test1")
+@Component
 public class Test1WSServer extends WSExtServerHandler {
 
 	private static final Logger LOGGER = Logger.getLogger(Test1WSServer.class.getName());

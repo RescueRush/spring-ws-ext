@@ -1,5 +1,8 @@
 package lu.rescue_rush.spring.ws_ext.server.abstr;
 
+import org.springframework.web.socket.CloseStatus;
+
+import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler;
 import lu.rescue_rush.spring.ws_ext.server.WSExtServerHandler.WebSocketSessionData;
 
 public interface WSConnectionController {

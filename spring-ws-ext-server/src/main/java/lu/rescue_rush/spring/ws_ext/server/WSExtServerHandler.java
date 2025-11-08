@@ -86,6 +86,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	protected List<ConnectionAwareComponent> connectionAwareComponents;
 	protected List<TransactionAwareComponent> transactionAwareComponents;
 
+	protected final boolean allowAnonymous;
 	protected final boolean timeout;
 	protected final long timeoutDelay;
 
@@ -109,6 +110,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 
 			final WSTimeout timeout = target.getAnnotation(WSTimeout.class);
+			this.allowAnonymous = target.isAnnotationPresent(AllowAnonymous.class);
 
 			final Map<String, WSHandlerMethod> methods = new ConcurrentHashMap<>();
 
@@ -635,6 +637,18 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	public WSExtServerHandler getBean() {
 		return bean;
+	}
+
+	public boolean isAllowAnonymous() {
+		return allowAnonymous;
+	}
+
+	public boolean isTimeout() {
+		return timeout;
+	}
+
+	public long getTimeoutDelay() {
+		return timeoutDelay;
 	}
 
 	@Override

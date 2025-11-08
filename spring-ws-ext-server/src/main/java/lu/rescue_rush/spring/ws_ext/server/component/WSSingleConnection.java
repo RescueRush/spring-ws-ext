@@ -95,7 +95,7 @@ public class WSSingleConnection implements WSExtServerComponent, ConnectionAware
 				.put(bean.getBeanPath(),
 						bean
 								.getComponentOfType(WSUserManager.class)
-								.orElseThrow(() -> new IllegalStateException("No WSExtUserManager found on WS: " + bean.getBeanPath())));
+								.orElseThrow(() -> new IllegalStateException("No WSUserManager found on WS: " + bean.getBeanPath())));
 	}
 
 }
