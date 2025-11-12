@@ -242,6 +242,14 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		synchronized (session) {
 			final WebSocketSessionData sessionData = wsSessionDatas.get(session.getId());
 
+			if (sessionData == null) {
+				LOGGER
+						.info("[" + session.getId() + "] Session closed because the associated data wasn't found. Received message: "
+								+ message.getPayload());
+				session.close(CloseStatus.SERVER_ERROR);
+				return;
+			}
+
 			if (DEBUG) {
 				LOGGER.info("[" + sessionData.getId() + "] Received message: " + message.getPayload());
 			}
@@ -372,7 +380,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	 * 
 	 * @return weather the exception will be forwarded to the client (default: true)
 	 */
-	protected boolean handleMessageError(WebSocketSessionData sessionData, JsonNode incomingJson, Exception e) {
+	protected boolean handleMessageError(WebSocketSessionData sessionData, JsonNode incomingJson, Throwable e) {
 		if (DEBUG) {
 			LOGGER
 					.severe("[" + sessionData.getId() + "] Error while handling message (" + sessionData.getRequestPath() + "): "
@@ -380,6 +388,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			e.printStackTrace();
 		} else {
 			LOGGER.severe("[" + sessionData.getId() + "] Error when handling incoming packet: " + e);
+			while (e.getCause() != null) {
+				e = e.getCause();
+				LOGGER.severe("Caused by:" + e);
+			}
 		}
 		return true;
 	}
