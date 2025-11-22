@@ -581,7 +581,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		for (String id : ids) {
 			final WebSocketSessionData wsSessionData = wsSessionDatas.get(id);
-			if (!wsSessionData.isValid()) {
+			if (wsSessionData != null && !wsSessionData.isValid()) {
 				continue;
 			}
 
@@ -616,7 +616,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 		for (String id : ids) {
 			final WebSocketSessionData wsSessionData = wsSessionDatas.get(id);
-			if (!wsSessionData.isValid()) {
+			if (wsSessionData != null && !wsSessionData.isValid()) {
 				continue;
 			}
 
