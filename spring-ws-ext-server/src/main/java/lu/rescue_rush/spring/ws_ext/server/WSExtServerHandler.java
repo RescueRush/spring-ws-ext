@@ -580,7 +580,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		final TextMessage msg = new TextMessage(json);
 
 		for (String id : ids) {
-			final WebSocketSessionData wsSessionData = wsSessionDatas.get(id);
+			if (!hasConnectedSessionData(id)) {
+				continue;
+			}
+			final WebSocketSessionData wsSessionData = getConnectedSessionData(id);
 			if (wsSessionData == null || !wsSessionData.isValid()) {
 				continue;
 			}
@@ -615,13 +618,17 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		int count = 0;
 
 		for (String id : ids) {
-			final WebSocketSessionData wsSessionData = wsSessionDatas.get(id);
+			if (!hasConnectedSessionData(id)) {
+				continue;
+			}
+			final WebSocketSessionData wsSessionData = getConnectedSessionData(id);
 			if (wsSessionData == null || !wsSessionData.isValid()) {
 				continue;
 			}
 
 			final WebSocketSession wsSession = wsSessionData.getSession();
 			synchronized (wsSession) {
+				System.err.println(wsSession.isOpen());
 				if (wsSession.isOpen()) {
 					try {
 						final String json = buildPacket(destination, null, payload.apply(wsSessionData));
