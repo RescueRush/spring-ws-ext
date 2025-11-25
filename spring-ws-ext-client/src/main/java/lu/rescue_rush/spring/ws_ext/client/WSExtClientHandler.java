@@ -53,7 +53,10 @@ import lu.rescue_rush.spring.ws_ext.common.annotations.WSResponseMapping;
 @ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
 public abstract class WSExtClientHandler extends TextWebSocketHandler implements SelfReferencingBean {
 
-	public static final String DEBUG_PROPERTY = WSExtClientHandler.class.getSimpleName() + ".debug";
+	public static final String GLOBAL_DEBUG_PROPERTY = WSExtClientHandler.class.getSimpleName() + ".isDebug()";
+	public static boolean GLOBAL_DEBUG = Boolean.getBoolean(GLOBAL_DEBUG_PROPERTY);
+
+	public final String DEBUG_PROPERTY = this.getClass().getSimpleName() + ".debug";
 	public boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
 
 	private static final Logger STATIC_LOGGER = Logger.getLogger(WSExtClientHandler.class.getName());
@@ -127,7 +130,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 										ERROR_HANDLER_ENDPOINT, ERROR_HANDLER_ENDPOINT));
 			} catch (NoSuchMethodException | SecurityException e) {
 				STATIC_LOGGER.warning("Failed to register default error handler: " + e);
-				if (DEBUG) {
+				if (GLOBAL_DEBUG) {
 					e.printStackTrace();
 				}
 			}
@@ -196,7 +199,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 				try {
 					session.close();
 				} catch (IOException e) {
-					if (DEBUG) {
+					if (GLOBAL_DEBUG) {
 						LOGGER.warning("Error while closing WebSocket session: " + e.getMessage());
 					}
 				}
@@ -225,7 +228,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			client = new StandardWebSocketClient();
 			session = client.execute(this, bean.buildHttpHeaders(), path).get();
 		} catch (Exception e) {
-			if (DEBUG) {
+			if (GLOBAL_DEBUG) {
 				LOGGER.log(Level.WARNING, "Connection failed to '" + path + "': ", e);
 			} else {
 				LOGGER.log(Level.WARNING, "Connection failed to '" + path + "' (" + e.getMessage() + ")");
@@ -236,7 +239,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 	private void scheduleReconnect() {
 		if (persistentConnection) {
-			if (DEBUG) {
+			if (GLOBAL_DEBUG) {
 				LOGGER.info("Reconnecting in 5 sec...");
 			}
 			reconnectScheduler.schedule(this::connect, 5, TimeUnit.SECONDS);
@@ -268,7 +271,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
 		setSession(session);
 
-		if (DEBUG) {
+		if (GLOBAL_DEBUG) {
 			LOGGER.info("Received message: " + message.getPayload());
 		}
 
@@ -326,7 +329,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 				}
 				final String jsonResponse = objectMapper.writeValueAsString(root);
 
-				if (DEBUG) {
+				if (GLOBAL_DEBUG) {
 					LOGGER.info("Sending response (" + requestPath + " -> " + responsePath + "): " + jsonResponse);
 				}
 
@@ -342,7 +345,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 									returnsVoid ? null : new MessageData(responsePath, packetId, returnValue));
 				} catch (Exception e) {
 					LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
-					if (DEBUG) {
+					if (GLOBAL_DEBUG) {
 						e.printStackTrace();
 					}
 				}
@@ -370,7 +373,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	}
 
 	protected void handleIncomingError(WebSocketSessionData sessionData, JsonNode packet) {
-		if (DEBUG) {
+		if (GLOBAL_DEBUG) {
 			LOGGER.warning("[" + sessionData.getSession().getId() + "] Error packet received: " + packet.toString());
 		}
 	}
@@ -379,7 +382,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
 		setSession(session);
 
-		if (DEBUG) {
+		if (GLOBAL_DEBUG) {
 			LOGGER.warning("Transport error on session: " + exception.getMessage());
 		}
 
@@ -397,7 +400,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	private void badRequest(boolean b, String msg, String content) {
 		if (!b)
 			return;
-		if (DEBUG)
+		if (GLOBAL_DEBUG)
 			LOGGER.warning(msg + " (" + content + ")");
 		throw new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
 	}
@@ -412,7 +415,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 		try {
 			final String json = buildPacket(destination, packetId, payload);
 
-			if (DEBUG) {
+			if (GLOBAL_DEBUG) {
 				LOGGER.info("Sending packet (" + destination + "): " + json);
 			}
 
@@ -425,7 +428,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 					m.onTransaction(sessionData, TransactionDirection.OUT, null, new MessageData(destination, packetId, null));
 				} catch (Exception e) {
 					LOGGER.warning("Failed to notify TransactionAwareComponent '" + m.getClass().getName() + "': " + e.getMessage());
-					if (DEBUG) {
+					if (GLOBAL_DEBUG) {
 						e.printStackTrace();
 					}
 				}
@@ -477,7 +480,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 	}
 
 	protected void setSession(WebSocketSession session) {
-		if (this.session != session && DEBUG) {
+		if (this.session != session && GLOBAL_DEBUG) {
 			LOGGER.info("WebSocketSession instance changed for some reason.");
 		}
 		if (session == null) {
@@ -495,7 +498,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 			}
 			return true;
 		} catch (InterruptedException e) {
-			if (DEBUG) {
+			if (GLOBAL_DEBUG) {
 				LOGGER.warning("Thread: " + Thread.currentThread().getName() + " interrupted while awaiting connection");
 			}
 			Thread.interrupted();
@@ -639,7 +642,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 				comp.onConnect(sessionData);
 			} catch (Exception e) {
 				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
-				if (DEBUG) {
+				if (GLOBAL_DEBUG) {
 					e.printStackTrace();
 				}
 			}
@@ -654,7 +657,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 				comp.onDisconnect(sessionData);
 			} catch (Exception e) {
 				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
-				if (DEBUG) {
+				if (GLOBAL_DEBUG) {
 					e.printStackTrace();
 				}
 			}

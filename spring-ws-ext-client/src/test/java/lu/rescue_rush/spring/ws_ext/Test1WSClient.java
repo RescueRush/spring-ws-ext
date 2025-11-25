@@ -26,7 +26,7 @@ public class Test1WSClient extends WSExtClientHandler {
 
 	@Override
 	public void init() {
-		super.DEBUG = true;
+		super.GLOBAL_DEBUG = true;
 		LOGGER.info("Test1WS (client) initialized");
 	}
 

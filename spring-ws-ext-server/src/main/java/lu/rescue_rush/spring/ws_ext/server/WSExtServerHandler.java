@@ -58,7 +58,10 @@ import lu.rescue_rush.spring.ws_ext.server.config.SimpleHandshakeInterceptor;
 @ComponentScan(basePackageClasses = SelfReferencingBeanPostProcessor.class)
 public class WSExtServerHandler extends TextWebSocketHandler implements SelfReferencingBean {
 
-	public static final String DEBUG_PROPERTY = WSExtServerHandler.class.getSimpleName() + ".debug";
+	public static final String GLOBAL_DEBUG_PROPERTY = WSExtServerHandler.class.getSimpleName() + ".debug";
+	public static boolean GLOBAL_DEBUG = Boolean.getBoolean(GLOBAL_DEBUG_PROPERTY);
+
+	public final String DEBUG_PROPERTY = this.getClass().getSimpleName() + ".debug";
 	public boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
 
 	public static final long TIMEOUT = 60_000;
@@ -143,7 +146,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 										ERROR_HANDLER_ENDPOINT, ERROR_HANDLER_ENDPOINT, true, true));
 			} catch (NoSuchMethodException | SecurityException e) {
 				STATIC_LOGGER.warning("Failed to register default error handler: " + e);
-				if (DEBUG) {
+				if (isDebug()) {
 					e.printStackTrace();
 				}
 			}
@@ -190,7 +193,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			final WebSocketSession session = sessionData.getSession();
 			if (!session.isOpen()) {
 				try {
-					if (DEBUG) {
+					if (isDebug()) {
 						LOGGER.info("Removed invalid session [" + sessionData.getSession().getId() + "])");
 					}
 					sessionData.getSession().close(CloseStatus.NORMAL);
@@ -202,7 +205,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 			if (this.timeout && !sessionData.isActive()) {
 				try {
-					if (DEBUG) {
+					if (isDebug()) {
 						LOGGER.info("Removed timed out session [" + sessionData.getSession().getId() + "])");
 					}
 					sessionData.getSession().close(CloseStatus.NORMAL);
@@ -254,7 +257,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				return;
 			}
 
-			if (DEBUG) {
+			if (isDebug()) {
 				LOGGER.info("[" + sessionData.getId() + "] Received message: " + message.getPayload());
 			}
 
@@ -320,7 +323,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				if (sendResponse) {
 					final String jsonResponse = buildPacket(responsePath, packetId, returnValue);
 
-					if (DEBUG) {
+					if (isDebug()) {
 						LOGGER
 								.info("[" + sessionData.getId() + "] Sending response (" + requestPath + " -> " + responsePath + "): "
 										+ jsonResponse);
@@ -340,7 +343,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 						LOGGER
 								.warning("[" + sessionData.getId() + "] Failed to notify ConnectionAwareComponent '"
 										+ comp.getClass().getName() + "': " + e.getMessage());
-						if (DEBUG) {
+						if (isDebug()) {
 							e.printStackTrace();
 						}
 					}
@@ -379,7 +382,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	/**
 	 * To override: handles the caught exception when handling an {@link #handleTextMessage() incoming
 	 * packet}.<br>
-	 * By default: logs the error and prints the stack trace if in {@link #DEBUG} mode.<br>
+	 * By default: logs the error and prints the stack trace if in {@link #isDebug()} mode.<br>
 	 * Throwing any exception will pass it to the {@link QuietExceptionWebSocketHandlerDecorator}, which
 	 * will close the session without forwarding the exception. It is recommended to handle errors using
 	 * {@link WebSocketSessionData#close} if needed.
@@ -387,7 +390,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	 * @return weather the exception will be forwarded to the client (default: true)
 	 */
 	protected boolean handleMessageError(WebSocketSessionData sessionData, JsonNode incomingJson, Throwable e) {
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER
 					.severe("[" + sessionData.getId() + "] Error while handling message (" + sessionData.getRequestPath() + "): "
 							+ e.getMessage() + " (" + e.getClass().getName() + ")");
@@ -406,7 +409,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	 * To override incoming {@link #ERROR_HANDLER_ENDPOINT} handler
 	 */
 	protected void handleIncomingError(WebSocketSessionData sessionData, JsonNode packet) {
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER.warning("[" + sessionData.getId() + "] Error packet received: " + packet.toString());
 		}
 	}
@@ -415,7 +418,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		if (!b) {
 			return;
 		}
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER.warning("[" + sessionData.getId() + "] " + msg + " (" + content + ")");
 		}
 		throw new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
@@ -466,7 +469,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				try {
 					final String json = buildPacket(destination, packetId, payload);
 
-					if (DEBUG) {
+					if (isDebug()) {
 						LOGGER.info("[" + sessionData.getId() + "] Sending message (" + destination + "): " + json);
 					}
 
@@ -485,7 +488,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 							LOGGER
 									.warning("[" + sessionData.getId() + "] Failed to notify TransactionAwareComponent '"
 											+ m.getClass().getName() + "': " + e.getMessage());
-							if (DEBUG) {
+							if (isDebug()) {
 								e.printStackTrace();
 							}
 						}
@@ -494,7 +497,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 					return true;
 				} catch (IOException e) {
 					LOGGER.warning("[" + sessionData.getId() + "] Failed to send message to session: " + e);
-					if (DEBUG) {
+					if (isDebug()) {
 						e.printStackTrace();
 					}
 				}
@@ -524,7 +527,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 						wsSession.sendMessage(msg);
 					} catch (IOException e) {
 						LOGGER.warning("[" + wsSessionData.getId() + "] Failed to send message to session: " + e.getMessage());
-						if (DEBUG) {
+						if (isDebug()) {
 							e.printStackTrace();
 						}
 					}
@@ -535,7 +538,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 		}
 
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER.info("Broadcasting message to " + count + " sessions on " + destination + ": " + json);
 		}
 
@@ -558,7 +561,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 						wsSession.sendMessage(new TextMessage(json));
 					} catch (IOException e) {
 						LOGGER.warning("[" + wsSessionData.getId() + "] Failed to send message to session: " + e.getMessage());
-						if (DEBUG) {
+						if (isDebug()) {
 							e.printStackTrace();
 						}
 					}
@@ -569,7 +572,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 		}
 
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER.info("Broadcasting message to " + count + " sessions on " + destination);
 		}
 
@@ -598,7 +601,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 						wsSession.sendMessage(msg);
 					} catch (IOException e) {
 						LOGGER.warning("[" + wsSessionData.getId() + "] Failed to send message to session: " + e.getMessage());
-						if (DEBUG) {
+						if (isDebug()) {
 							e.printStackTrace();
 						}
 					}
@@ -609,7 +612,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 		}
 
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER.info("Broadcasting message to " + count + " sessions on " + destination + ": " + json);
 		}
 
@@ -636,7 +639,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 						wsSession.sendMessage(new TextMessage(json));
 					} catch (IOException e) {
 						LOGGER.warning("[" + wsSessionData.getId() + "] Failed to send message to session: " + e.getMessage());
-						if (DEBUG) {
+						if (isDebug()) {
 							e.printStackTrace();
 						}
 					}
@@ -647,7 +650,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 		}
 
-		if (DEBUG) {
+		if (isDebug()) {
 			LOGGER.info("Broadcasting message to " + count + " sessions on " + destination);
 		}
 
@@ -760,6 +763,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 	public <T extends WSExtServerComponent> Optional<T> getComponentOfType(Class<T> clazz) {
 		return components.stream().filter(c -> clazz.isInstance(c)).map(c -> clazz.cast(c)).findFirst();
+	}
+
+	public boolean isDebug() {
+		return DEBUG || GLOBAL_DEBUG;
 	}
 
 	public class WebSocketSessionData {
@@ -984,7 +991,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				comp.onConnect(sessionData);
 			} catch (Exception e) {
 				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
-				if (DEBUG) {
+				if (isDebug()) {
 					e.printStackTrace();
 				}
 			}
@@ -999,7 +1006,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				comp.onDisconnect(sessionData);
 			} catch (Exception e) {
 				LOGGER.warning("Failed to notify ConnectionAwareComponent '" + comp.getClass().getName() + "': " + e.getMessage());
-				if (DEBUG) {
+				if (isDebug()) {
 					e.printStackTrace();
 				}
 			}
