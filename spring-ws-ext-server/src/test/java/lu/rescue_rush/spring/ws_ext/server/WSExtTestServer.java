@@ -57,15 +57,19 @@ public class WSExtTestServer {
 				return false;
 			}
 		}, "ws://localhost:" + port + "/test1").get();
-		
+
 		System.out.println("WebSocket session established: " + session.isOpen());
 		assert session.isOpen() : "WebSocket session should be open";
 
 		final String msg = new JSONObject().put("destination", "/ping").put("payload", "hayyyy :3").toString();
 		session.sendMessage(new TextMessage(msg));
-		System.out.println("Message sent: "+msg);
-		
+		System.out.println("Message sent: " + msg);
+
+		session.sendMessage(new TextMessage(new JSONObject().put("destination", "/doesntexist").put("payload", "hayyyy :3").toString()));
+
 		Thread.sleep(2000); // Wait for the message to be processed
+		
+		session.close(CloseStatus.NORMAL);
 	}
 
 }
