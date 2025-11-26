@@ -52,7 +52,7 @@ public class WSUserManager extends GenericWSExtServerComponent implements Connec
 		if (userSessionDatas.containsKey(user.getId())) {
 			// user already connected, disconnect previous session
 			final WebSocketSessionData previousSession = userSessionDatas.get(user.getId());
-			if (previousSession.isOpen()) {
+			if (previousSession.isValid() && previousSession.isOpen()) {
 				if (DEBUG) {
 					LOGGER.warning("User " + user + " is already connected to " + super.bean.getBeanPath() + ", closing old connection.");
 				}

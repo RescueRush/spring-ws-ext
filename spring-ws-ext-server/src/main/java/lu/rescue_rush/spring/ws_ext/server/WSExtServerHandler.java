@@ -222,15 +222,43 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	public void afterConnectionEstablished(WebSocketSession session) {
 		final WebSocketSessionData sessionData = new WebSocketSessionData(
 				(String) session.getAttributes().getOrDefault(SimpleHandshakeInterceptor.HTTP_ATTRIBUTE_ID, session.getId()));
+
+		if (wsSessions.containsKey(sessionData.getId())) {
+			final WebSocketSession previousSession = wsSessions.get(sessionData.getId());
+			// final WebSocketSessionData previousSessionData = wsSessionDatas.get(previousSession.getId());
+			if (previousSession != null && previousSession.isOpen()) {
+				if (isDebug()) {
+					LOGGER
+							.warning("[" + sessionData.getId() + "] Session is already connected to " + beanPath
+									+ ", closing old connection.");
+				}
+				try {
+					previousSession.close(CloseStatus.POLICY_VIOLATION);
+				} catch (IOException e) {
+					LOGGER.warning("[" + sessionData.getId() + "] Failed to disconnect previous session." + e);
+				}
+			} else if (isDebug()) {
+				LOGGER.warning("[" + sessionData.getId() + "] Previous session was invalid but still cached, ignoring.");
+			}
+			wsSessionDatas.remove(previousSession.getId());
+			wsSessions.remove(sessionData.getId());
+		}
+
 		wsSessions.put(sessionData.getId(), session);
 		wsSessionDatas.put(session.getId(), sessionData);
 
 		try {
 			if (transactionController != null && !transactionController.beforeTransaction(sessionData, Optional.empty())) {
+				if (isDebug()) {
+					LOGGER.info("[" + sessionData.getId() + "] Closing session, refused by Transaction Controller for: " + beanPath);
+				}
 				sessionData.close(CloseStatus.NOT_ACCEPTABLE);
 			}
 
 			if (connectionController != null && !connectionController.beforeConnection(sessionData)) {
+				if (isDebug()) {
+					LOGGER.info("[" + sessionData.getId() + "] Closing session, refused by Connection Controller for: " + beanPath);
+				}
 				sessionData.close(CloseStatus.NOT_ACCEPTABLE);
 			}
 
