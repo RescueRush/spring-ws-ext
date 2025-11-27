@@ -455,6 +455,9 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
 		final WebSocketSessionData sessionData = wsSessionDatas.get(session.getId());
+		if(sessionData == null) {
+			return;
+		}
 
 		try {
 			if (transactionController != null) {
