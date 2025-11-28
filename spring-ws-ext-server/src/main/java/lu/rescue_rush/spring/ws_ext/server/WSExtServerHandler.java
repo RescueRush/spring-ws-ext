@@ -223,6 +223,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 		final WebSocketSessionData sessionData = new WebSocketSessionData(
 				(String) session.getAttributes().getOrDefault(SimpleHandshakeInterceptor.HTTP_ATTRIBUTE_ID, session.getId()));
 
+		if (isDebug()) {
+			LOGGER.info("[" + sessionData.getId() + "] Connected: " + session.getId());
+		}
+
 		if (wsSessions.containsKey(sessionData.getId())) {
 			final WebSocketSession previousSession = wsSessions.get(sessionData.getId());
 			// final WebSocketSessionData previousSessionData = wsSessionDatas.get(previousSession.getId());
@@ -242,6 +246,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 			}
 			wsSessionDatas.remove(previousSession.getId());
 			wsSessions.remove(sessionData.getId());
+		} else if (isDebug()) {
+			LOGGER.warning("[" + sessionData.getId() + "] No previous session to disconnect.");
 		}
 
 		wsSessions.put(sessionData.getId(), session);
@@ -478,6 +484,10 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 
 			wsSessionDatas.remove(session.getId());
 			wsSessions.remove(sessionData.getId());
+
+			if (isDebug()) {
+				LOGGER.info("[" + sessionData.getId() + "] Disconnected: " + session.getId());
+			}
 		}
 	}
 
