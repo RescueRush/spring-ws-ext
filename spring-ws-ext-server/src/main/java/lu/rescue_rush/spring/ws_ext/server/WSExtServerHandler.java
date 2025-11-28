@@ -455,7 +455,7 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
 		final WebSocketSessionData sessionData = wsSessionDatas.get(session.getId());
-		if(sessionData == null) {
+		if (sessionData == null) {
 			return;
 		}
 
@@ -476,8 +476,8 @@ public class WSExtServerHandler extends TextWebSocketHandler implements SelfRefe
 				transactionController.afterTransaction(sessionData);
 			}
 
-			wsSessions.remove(session.getId());
 			wsSessionDatas.remove(session.getId());
+			wsSessions.remove(sessionData.getId());
 		}
 	}
 
