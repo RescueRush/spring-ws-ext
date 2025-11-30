@@ -27,6 +27,9 @@ class WebSocketWrapper {
 
     connect(url) {
         this.url = this.host + url;
+        if (this.debug) {
+            console.log("Trying connection to", this.url);
+        }
         this._connectSocket();
     }
 
@@ -40,16 +43,19 @@ class WebSocketWrapper {
         };
 
         this.socket.onclose = (event) => {
-            if(event.code in this.stopConnectionCodes) {
+            if (event.code in this.stopConnectionCodes) {
                 this.shouldReconnect = false;
-                if(this.debug) {
-                    console.log("Received ", event, " closing connection as code is in ", this.stopConnectionCodes);
+                if (this.debug) {
+                    console.log("Received", event, "closing connection as code is in", this.stopConnectionCodes);
                 }
             }
 
             this.disconnectedCallbacks.forEach(cb => cb(event));
 
             if (this.shouldReconnect && this.currentReconnectAttempts < this.maxReconnectAttempts) {
+                if (this.debug) {
+                    console.log("Retying connection", this.currentReconnectAttempts, "/", this.maxReconnectAttempts, "in", this.reconnectDelay);
+                }
                 this.currentReconnectAttempts++;
                 setTimeout(() => {
                     this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
@@ -61,18 +67,24 @@ class WebSocketWrapper {
         this.socket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                const { destination, payload, packetId } = message;
+                const {
+                    destination,
+                    payload,
+                    packetId
+                } = message;
 
                 if (this.debug) {
-                    console.log("Received message:", { destination, packetId, payload });
+                    console.log("Received message:", {
+                        destination,
+                        packetId,
+                        payload
+                    });
                 }
 
                 if (packetId && this.pendingCallbacks[packetId]) {
                     this.pendingCallbacks[packetId](payload);
                     delete this.pendingCallbacks[packetId];
-                } 
-
-                else if (destination && this.callbacks[destination]) {
+                } else if (destination && this.callbacks[destination]) {
                     this.callbacks[destination](payload, packetId);
                 }
             } catch (err) {
@@ -120,8 +132,11 @@ class WebSocketWrapper {
     }
 
     sendPacket(destination, payload = {}) {
-        if (this.socket.readyState === WebSocket.OPEN) {
-            const packet = { destination, payload };
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            const packet = {
+                destination,
+                payload
+            };
             if (this.debug) {
                 console.log("Sending packet:", packet);
             }
@@ -129,23 +144,25 @@ class WebSocketWrapper {
             return true;
         } else {
             if (this.debug) {
-                console.warn("Cannot send packet, socket is not open:", { destination, payload });
+                console.warn("Cannot send packet, socket is not open:", {
+                    destination,
+                    payload
+                });
             }
             return false;
         }
     }
 
     sendCallbackPacket(destination, callback, payload = {}) {
-        const packetId = this._generatePacketId();  
-        this.pendingCallbacks[packetId] = callback;  
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            const packetId = this._generatePacketId();
+            this.pendingCallbacks[packetId] = callback;
 
-        const packet = {
-            destination,
-            payload,
-            packetId 
-        };
-
-        if (this.socket.readyState === WebSocket.OPEN) {
+            const packet = {
+                destination,
+                payload,
+                packetId
+            };
             if (this.debug) {
                 console.log("Sending callback packet:", packet);
             }
@@ -153,14 +170,18 @@ class WebSocketWrapper {
             return true;
         } else {
             if (this.debug) {
-                console.warn("Cannot send callback packet, socket is not open:", packet);
+                console.warn("Cannot send callback packet, socket is not open:", {
+                    destination,
+                    callback,
+                    payload
+                });
             }
             delete this.pendingCallbacks[packetId];
             return false;
         }
     }
 
-    _generatePacketId() {  
+    _generatePacketId() {
         return Math.random().toString(36).substr(2, 9) + Date.now();
     }
 }
