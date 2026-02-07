@@ -4,9 +4,9 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>lu.rescue_rush</groupId>
+		<groupId>lu.rescue-rush</groupId>
 		<artifactId>spring-ws-ext</artifactId>
-		<version>0.3</version>
+		<version>${revision}</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 

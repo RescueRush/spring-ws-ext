@@ -4,9 +4,9 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>lu.rescue_rush</groupId>
+		<groupId>lu.rescue-rush</groupId>
 		<artifactId>spring-ws-ext</artifactId>
-		<version>0.3</version>
+		<version>${revision}</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -43,8 +43,9 @@
 			<version>2.1.1</version>
 		</dependency>
 		<dependency>
-			<groupId>lu.rescue_rush</groupId>
+			<groupId>lu.rescue-rush</groupId>
 			<artifactId>spring-ws-ext-common</artifactId>
+			<version>${project.version}</version>
 		</dependency>
 
 		<!-- TESTS -->
@@ -55,13 +56,13 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>lu.rescue_rush</groupId>
+			<groupId>lu.rescue-rush</groupId>
 			<artifactId>spring-ws-ext-server</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>lu.rescue_rush</groupId>
+			<groupId>lu.rescue-rush</groupId>
 			<artifactId>spring-ws-ext-server</artifactId>
 			<version>${project.version}</version>
 			<type>test-jar</type>
