@@ -44,6 +44,8 @@
 	<scm>
 		<connection>scm:git:git@github.com:RescueRush/spring-ws-ext.git</connection>
 		<developerConnection>scm:git:git@github.com:RescueRush/spring-ws-ext.git</developerConnection>
+		<url>https://github.com/RescueRush/spring-ws-ext</url>
+		<tag>HEAD</tag>
 	</scm>
 
 	<distributionManagement>
