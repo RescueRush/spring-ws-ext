@@ -63,7 +63,7 @@ public abstract class WSExtClientHandler extends TextWebSocketHandler implements
 
 	public static final String ERROR_HANDLER_ENDPOINT = "/__error__";
 
-	private final Logger LOGGER;
+	protected final Logger LOGGER;
 
 	private StandardWebSocketClient client;
 	private WebSocketSession session;
