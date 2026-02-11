@@ -109,3 +109,6 @@ buildNumber.properties
 
 # bungee.txt
 # spigot.txt
+
+*/.flattened-pom.xml
+.flattened-pom.xml
