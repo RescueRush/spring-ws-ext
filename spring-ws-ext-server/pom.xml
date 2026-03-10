@@ -78,7 +78,6 @@
 		<dependency>
 			<groupId>lu.rescue-rush</groupId>
 			<artifactId>spring-ws-ext-common</artifactId>
-			<version>${project.version}</version>
 		</dependency>
 	</dependencies>
 
