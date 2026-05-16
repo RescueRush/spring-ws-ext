@@ -1,7 +1,5 @@
 # Spring Websocket Extended
 
----
-
 ### Maven:
 
 __Repositories__
