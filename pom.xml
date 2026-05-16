@@ -19,12 +19,12 @@
 	</modules>
 
 	<properties>
-		<revision>0.3.3</revision>
+		<revision>0.3.4-SNAPSHOT</revision>
 		<java.version>17</java.version>
 		<maven.compiler.source>${java.version}</maven.compiler.source>
 		<maven.compiler.target>${java.version}</maven.compiler.target>
 		<spring-framework.version>7.0.2</spring-framework.version>
-		<pclib.version>1.0.2</pclib.version>
+		<pclib.version>1.0.3-SNAPSHOT</pclib.version>
 	</properties>
 
 	<contributors>
@@ -72,7 +72,7 @@
 				<artifactId>pclib</artifactId>
 				<version>${pclib.version}</version>
 				<type>pom</type>
-				<scope>test</scope>
+				<scope>import</scope>
 			</dependency>
 
 			<dependency>

@@ -55,6 +55,13 @@
 			<version>3.5.4</version>
 		</dependency>
 
+		<!-- OPTIONAL -->
+		<dependency>
+			<groupId>lu.kbra</groupId>
+			<artifactId>pclib-pointer</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
 		<!-- TESTS -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
