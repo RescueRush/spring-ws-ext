@@ -22,12 +22,12 @@ public class WSSingleConnection implements WSExtServerComponent, ConnectionAware
 	public static final String DEBUG_PROPERTY = WSSingleConnection.class.getName() + ".debug";
 	public static boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
 
-	protected final static Logger LOGGER = Logger.getLogger(WSSingleConnection.class.getName());
+	protected static final Logger LOGGER = Logger.getLogger(WSSingleConnection.class.getName());
 
 	protected final String poolName;
 	protected Set<String> handlingPaths = new HashSet<>();
 
-	protected Map<Long, WebSocketSessionData> connectedSessions = new ConcurrentHashMap<>();
+	protected Map<Object, WebSocketSessionData> connectedSessions = new ConcurrentHashMap<>();
 	protected Map<String, WSUserManager> userManagers = new ConcurrentHashMap<>();
 
 	@Autowired

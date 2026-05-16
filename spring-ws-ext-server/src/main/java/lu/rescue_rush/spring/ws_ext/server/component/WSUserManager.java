@@ -27,9 +27,9 @@ public class WSUserManager extends GenericWSExtServerComponent implements Connec
 
 	public static final String DEBUG_PROPERTY = WSUserManager.class.getName() + ".debug";
 	public static boolean DEBUG = Boolean.getBoolean(DEBUG_PROPERTY);
-	private final static Logger STATIC_LOGGER = Logger.getLogger(WSUserManager.class.getName());
+	private static final Logger STATIC_LOGGER = Logger.getLogger(WSUserManager.class.getName());
 
-	private final Map<Long, WebSocketSessionData> userSessionDatas = new ConcurrentHashMap<>();
+	private final Map<Object, WebSocketSessionData> userSessionDatas = new ConcurrentHashMap<>();
 	private Logger LOGGER;
 
 	@Autowired
@@ -54,7 +54,8 @@ public class WSUserManager extends GenericWSExtServerComponent implements Connec
 			final WebSocketSessionData previousSession = userSessionDatas.get(user.getId());
 			if (previousSession.isValid() && previousSession.isOpen()) {
 				if (DEBUG) {
-					LOGGER.warning("User " + user + " is already connected to " + super.bean.getBeanPath() + ", closing old connection.");
+					LOGGER.warning("User " + user + " is already connected to " + super.bean.getBeanPath()
+							+ ", closing old connection.");
 				}
 				try {
 					previousSession.getSession().close(CloseStatus.POLICY_VIOLATION);
@@ -86,7 +87,7 @@ public class WSUserManager extends GenericWSExtServerComponent implements Connec
 		return userSessionDatas.containsKey(ud.getId());
 	}
 
-	public boolean hasUserSession(Long ud) {
+	protected boolean hasUserSession(Object ud) {
 		return userSessionDatas.containsKey(ud);
 	}
 
@@ -94,7 +95,7 @@ public class WSUserManager extends GenericWSExtServerComponent implements Connec
 		checkStatus(ud.getId());
 	}
 
-	public void checkStatus(long ud) {
+	protected void checkStatus(Object ud) {
 		if (!hasUserSession(ud)) {
 			return;
 		}

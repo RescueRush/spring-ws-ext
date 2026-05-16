@@ -2,12 +2,10 @@ package lu.rescue_rush.spring.ws_ext.server.abstr;
 
 public interface UserID extends Comparable<UserID> {
 
-	long getId();
+	Object getId();
 
 	@Override
-	default int compareTo(UserID o) {
-		return Long.compare(this.getId(), o.getId());
-	}
+	int compareTo(UserID o);
 
 	@Override
 	int hashCode();

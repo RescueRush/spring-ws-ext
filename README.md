@@ -3,9 +3,15 @@
 ---
 
 ### Maven:
+
 __Repositories__
-```
+```xml
 <repositories>
+  <repository>
+    <id>nexus.rescue-rush.lu-snapshots</id>
+    <url>https://nexus.rescue-rush.lu/repository/maven-public/</url>
+  </repository>
+  
   <repository>
     <id>nexus.rescue-rush.lu-releases</id>
     <url>https://nexus.rescue-rush.lu/repository/maven-releases/</url>
@@ -18,7 +24,7 @@ __Repositories__
 ```
 
 __Latest release__
-```
+```xml
 <dependencies>
   <dependency>
     <groupId>lu.rescue-rush</groupId>
